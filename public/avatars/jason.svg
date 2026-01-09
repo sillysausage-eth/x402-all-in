@@ -1,0 +1,74 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient - Energetic orange/red for the enthusiast -->
+  <defs>
+    <linearGradient id="jason-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f12711"/>
+      <stop offset="100%" stop-color="#f5af19"/>
+    </linearGradient>
+    <linearGradient id="jason-skin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f5d0c5"/>
+      <stop offset="100%" stop-color="#daa06d"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Circle background -->
+  <circle cx="100" cy="100" r="100" fill="url(#jason-bg)"/>
+  
+  <!-- Neck -->
+  <path d="M72 158 L72 180 Q100 198 128 180 L128 158 Z" fill="url(#jason-skin)"/>
+  
+  <!-- Casual hoodie/sweater -->
+  <path d="M35 200 Q55 165 100 158 Q145 165 165 200 Z" fill="#2d3436"/>
+  <!-- Hood strings -->
+  <line x1="85" y1="175" x2="85" y2="200" stroke="#636e72" stroke-width="2"/>
+  <line x1="115" y1="175" x2="115" y2="200" stroke="#636e72" stroke-width="2"/>
+  <!-- Hoodie neckline -->
+  <path d="M80 158 Q100 175 120 158" stroke="#636e72" stroke-width="2" fill="none"/>
+  
+  <!-- Face shape - Rounder, friendly -->
+  <ellipse cx="100" cy="112" rx="46" ry="50" fill="url(#jason-skin)"/>
+  
+  <!-- Hair - Curly, full -->
+  <path d="M54 95 Q52 50 100 45 Q148 50 146 95" fill="#1a1a1a"/>
+  <circle cx="60" cy="70" r="12" fill="#1a1a1a"/>
+  <circle cx="80" cy="55" r="14" fill="#1a1a1a"/>
+  <circle cx="100" cy="48" r="15" fill="#1a1a1a"/>
+  <circle cx="120" cy="55" r="14" fill="#1a1a1a"/>
+  <circle cx="140" cy="70" r="12" fill="#1a1a1a"/>
+  
+  <!-- Eyebrows - Raised, excited -->
+  <path d="M68 90 Q80 84 93 88" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M132 90 Q120 84 107 88" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Eyes - Wide, enthusiastic -->
+  <ellipse cx="80" cy="103" rx="11" ry="8" fill="white"/>
+  <ellipse cx="120" cy="103" rx="11" ry="8" fill="white"/>
+  <circle cx="81" cy="104" r="5" fill="#4a3728"/>
+  <circle cx="121" cy="104" r="5" fill="#4a3728"/>
+  <circle cx="82" cy="102" r="2" fill="white"/>
+  <circle cx="122" cy="102" r="2" fill="white"/>
+  
+  <!-- Nose -->
+  <path d="M100 102 Q106 118 100 130 Q94 127 96 124" stroke="#c4a484" stroke-width="2" fill="none"/>
+  
+  <!-- Mouth - Big smile! -->
+  <path d="M80 142 Q100 158 120 142" stroke="#6d4c41" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Teeth showing -->
+  <path d="M85 145 Q100 155 115 145" fill="white"/>
+  
+  <!-- Beard - Full, well-groomed -->
+  <path d="M60 125 Q60 165 100 175 Q140 165 140 125" fill="#1a1a1a" opacity="0.9"/>
+  <!-- Beard gap for mouth -->
+  <ellipse cx="100" cy="148" rx="22" ry="12" fill="url(#jason-skin)"/>
+  <!-- Mouth on beard -->
+  <path d="M82 148 Q100 160 118 148" stroke="#6d4c41" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M87 150 Q100 158 113 150" fill="white"/>
+  
+  <!-- Mustache -->
+  <path d="M75 135 Q100 145 125 135 Q100 140 75 135" fill="#1a1a1a"/>
+  
+  <!-- Ears (partially hidden by hair) -->
+  <ellipse cx="54" cy="108" rx="7" ry="12" fill="url(#jason-skin)"/>
+  <ellipse cx="146" cy="108" rx="7" ry="12" fill="url(#jason-skin)"/>
+</svg>
+

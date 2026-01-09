@@ -1,0 +1,72 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient - Dark sophisticated navy for the strategist -->
+  <defs>
+    <linearGradient id="sacks-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f2027"/>
+      <stop offset="50%" stop-color="#203a43"/>
+      <stop offset="100%" stop-color="#2c5364"/>
+    </linearGradient>
+    <linearGradient id="sacks-skin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f5d0c5"/>
+      <stop offset="100%" stop-color="#d4a574"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Circle background -->
+  <circle cx="100" cy="100" r="100" fill="url(#sacks-bg)"/>
+  
+  <!-- Neck -->
+  <path d="M75 155 L75 180 Q100 195 125 180 L125 155 Z" fill="url(#sacks-skin)"/>
+  
+  <!-- Suit jacket - Sharp dressed -->
+  <path d="M40 200 Q55 165 100 160 Q145 165 160 200 Z" fill="#1a1a2e"/>
+  <!-- Lapels -->
+  <path d="M75 160 L90 200 L100 175 L110 200 L125 160 Q100 175 75 160" fill="#16213e"/>
+  <!-- Tie -->
+  <path d="M97 175 L100 200 L103 175 L100 165 Z" fill="#8b0000"/>
+  
+  <!-- Shirt collar -->
+  <path d="M85 160 L95 175 L100 165 L105 175 L115 160" stroke="white" stroke-width="2" fill="none"/>
+  
+  <!-- Face shape - Angular -->
+  <ellipse cx="100" cy="110" rx="42" ry="48" fill="url(#sacks-skin)"/>
+  
+  <!-- Hair - Receding, neat -->
+  <path d="M60 85 Q60 50 100 48 Q140 50 140 85 Q135 65 100 62 Q65 65 60 85" fill="#4a3728"/>
+  <!-- Hair sides -->
+  <path d="M58 90 Q55 75 65 70" fill="#4a3728"/>
+  <path d="M142 90 Q145 75 135 70" fill="#4a3728"/>
+  
+  <!-- Eyebrows - Slightly raised, skeptical -->
+  <path d="M68 92 Q78 88 92 91" stroke="#4a3728" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M132 92 Q122 88 108 91" stroke="#4a3728" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Eyes - Sharp, analytical -->
+  <ellipse cx="80" cy="102" rx="9" ry="5.5" fill="white"/>
+  <ellipse cx="120" cy="102" rx="9" ry="5.5" fill="white"/>
+  <circle cx="81" cy="102" r="3.5" fill="#3d5c5c"/>
+  <circle cx="121" cy="102" r="3.5" fill="#3d5c5c"/>
+  <circle cx="82" cy="101" r="1.2" fill="white"/>
+  <circle cx="122" cy="101" r="1.2" fill="white"/>
+  
+  <!-- Glasses - Rectangular frames -->
+  <rect x="65" y="95" width="28" height="18" rx="3" stroke="#2d2d2d" stroke-width="2" fill="none"/>
+  <rect x="107" y="95" width="28" height="18" rx="3" stroke="#2d2d2d" stroke-width="2" fill="none"/>
+  <path d="M93 102 L107 102" stroke="#2d2d2d" stroke-width="2"/>
+  <path d="M65 100 L55 98" stroke="#2d2d2d" stroke-width="2"/>
+  <path d="M135 100 L145 98" stroke="#2d2d2d" stroke-width="2"/>
+  
+  <!-- Nose - Distinguished -->
+  <path d="M100 100 Q103 115 100 125 Q97 122 98 120" stroke="#c4a484" stroke-width="2" fill="none"/>
+  
+  <!-- Mouth - Slight smirk -->
+  <path d="M88 138 Q100 142 112 138" stroke="#8b6b5c" stroke-width="2" fill="none" stroke-linecap="round"/>
+  
+  <!-- Subtle stubble -->
+  <ellipse cx="100" cy="145" rx="25" ry="15" fill="#4a3728" opacity="0.15"/>
+  
+  <!-- Ears -->
+  <ellipse cx="58" cy="105" rx="7" ry="11" fill="url(#sacks-skin)"/>
+  <ellipse cx="142" cy="105" rx="7" ry="11" fill="url(#sacks-skin)"/>
+</svg>
+

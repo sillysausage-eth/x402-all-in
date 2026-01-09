@@ -1,0 +1,71 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient - Cool teal/green for the scientist -->
+  <defs>
+    <linearGradient id="friedberg-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#134e5e"/>
+      <stop offset="100%" stop-color="#71b280"/>
+    </linearGradient>
+    <linearGradient id="friedberg-skin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fce4d6"/>
+      <stop offset="100%" stop-color="#deb887"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Circle background -->
+  <circle cx="100" cy="100" r="100" fill="url(#friedberg-bg)"/>
+  
+  <!-- Neck -->
+  <path d="M73 158 L73 180 Q100 195 127 180 L127 158 Z" fill="url(#friedberg-skin)"/>
+  
+  <!-- Casual button-up shirt -->
+  <path d="M40 200 Q55 165 100 160 Q145 165 160 200 Z" fill="#2c3e50"/>
+  <!-- Collar -->
+  <path d="M82 160 L92 178 L100 165 L108 178 L118 160" fill="#34495e"/>
+  <!-- Button placket -->
+  <line x1="100" y1="170" x2="100" y2="200" stroke="#1a252f" stroke-width="2"/>
+  <!-- Buttons -->
+  <circle cx="100" cy="180" r="2" fill="#7f8c8d"/>
+  <circle cx="100" cy="192" r="2" fill="#7f8c8d"/>
+  
+  <!-- Face shape -->
+  <ellipse cx="100" cy="112" rx="44" ry="48" fill="url(#friedberg-skin)"/>
+  
+  <!-- Hair - Shorter, neat -->
+  <path d="M58 92 Q58 52 100 48 Q142 52 142 92 Q138 70 100 65 Q62 70 58 92" fill="#5d4e37"/>
+  
+  <!-- Eyebrows - Thoughtful -->
+  <path d="M68 94 Q78 91 92 94" stroke="#5d4e37" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M132 94 Q122 91 108 94" stroke="#5d4e37" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Eyes - Calm, observant -->
+  <ellipse cx="80" cy="105" rx="9" ry="6" fill="white"/>
+  <ellipse cx="120" cy="105" rx="9" ry="6" fill="white"/>
+  <circle cx="80" cy="105" r="4" fill="#5d7d6a"/>
+  <circle cx="120" cy="105" r="4" fill="#5d7d6a"/>
+  <circle cx="81" cy="104" r="1.5" fill="white"/>
+  <circle cx="121" cy="104" r="1.5" fill="white"/>
+  
+  <!-- Glasses - Round, intellectual -->
+  <circle cx="80" cy="105" r="16" stroke="#2d2d2d" stroke-width="2.5" fill="none"/>
+  <circle cx="120" cy="105" r="16" stroke="#2d2d2d" stroke-width="2.5" fill="none"/>
+  <path d="M96 105 L104 105" stroke="#2d2d2d" stroke-width="2.5"/>
+  <path d="M64 102 L55 100" stroke="#2d2d2d" stroke-width="2"/>
+  <path d="M136 102 L145 100" stroke="#2d2d2d" stroke-width="2"/>
+  
+  <!-- Nose -->
+  <path d="M100 103 Q104 118 100 128 Q96 125 98 122" stroke="#c9a66b" stroke-width="2" fill="none"/>
+  
+  <!-- Mouth - Calm, slight smile -->
+  <path d="M88 140 Q100 146 112 140" stroke="#8b7355" stroke-width="2" fill="none" stroke-linecap="round"/>
+  
+  <!-- Light stubble -->
+  <ellipse cx="100" cy="148" rx="28" ry="18" fill="#5d4e37" opacity="0.15"/>
+  
+  <!-- Ears -->
+  <ellipse cx="56" cy="108" rx="7" ry="11" fill="url(#friedberg-skin)"/>
+  <ellipse cx="144" cy="108" rx="7" ry="11" fill="url(#friedberg-skin)"/>
+  
+  <!-- Small detail - maybe a subtle hint of science -->
+  <text x="20" y="185" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.3)">∑</text>
+</svg>
+

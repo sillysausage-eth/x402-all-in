@@ -1,0 +1,58 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient - Rich purple/blue for the VC king -->
+  <defs>
+    <linearGradient id="chamath-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </linearGradient>
+    <linearGradient id="chamath-skin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#c68642"/>
+      <stop offset="100%" stop-color="#8d5524"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Circle background -->
+  <circle cx="100" cy="100" r="100" fill="url(#chamath-bg)"/>
+  
+  <!-- Subtle pattern overlay -->
+  <circle cx="100" cy="100" r="100" fill="url(#chamath-bg)" opacity="0.9"/>
+  
+  <!-- Neck -->
+  <path d="M70 160 L70 180 Q100 200 130 180 L130 160 Z" fill="url(#chamath-skin)"/>
+  
+  <!-- Shirt/Collar - Casual polo style -->
+  <path d="M50 200 Q60 170 100 165 Q140 170 150 200 Z" fill="#1a1a2e"/>
+  <path d="M85 165 L85 185 L100 175 L115 185 L115 165 Q100 175 85 165" fill="#16213e"/>
+  
+  <!-- Face shape -->
+  <ellipse cx="100" cy="115" rx="45" ry="50" fill="url(#chamath-skin)"/>
+  
+  <!-- Hair - Short, neat -->
+  <path d="M55 95 Q55 55 100 50 Q145 55 145 95 Q145 75 100 72 Q55 75 55 95" fill="#1a1a1a"/>
+  
+  <!-- Eyebrows - Strong, expressive -->
+  <path d="M70 95 Q80 90 95 93" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M130 95 Q120 90 105 93" stroke="#1a1a1a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Eyes - Confident gaze -->
+  <ellipse cx="80" cy="105" rx="10" ry="6" fill="white"/>
+  <ellipse cx="120" cy="105" rx="10" ry="6" fill="white"/>
+  <circle cx="82" cy="105" r="4" fill="#2d2d2d"/>
+  <circle cx="122" cy="105" r="4" fill="#2d2d2d"/>
+  <circle cx="83" cy="104" r="1.5" fill="white"/>
+  <circle cx="123" cy="104" r="1.5" fill="white"/>
+  
+  <!-- Nose -->
+  <path d="M100 105 Q105 120 100 130 Q95 128 97 125" stroke="#8d5524" stroke-width="2" fill="none"/>
+  
+  <!-- Mouth - Confident smile -->
+  <path d="M85 142 Q100 150 115 142" stroke="#5c3d2e" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Beard shadow -->
+  <path d="M65 130 Q65 160 100 165 Q135 160 135 130" fill="#8d5524" opacity="0.3"/>
+  
+  <!-- Ears -->
+  <ellipse cx="55" cy="110" rx="8" ry="12" fill="url(#chamath-skin)"/>
+  <ellipse cx="145" cy="110" rx="8" ry="12" fill="url(#chamath-skin)"/>
+</svg>
+
