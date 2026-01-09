@@ -5,6 +5,7 @@
  * Created: Jan 6, 2026
  * Updated: Jan 7, 2026 - Fixed winner determination + all-in showdown bugs
  * Updated: Jan 7, 2026 - Added comprehensive showdown logging for ALL player hands
+ * Updated: Jan 9, 2026 - Fixed TypeScript error in all-in showdown excess return logic
  * Purpose: Server-side game loop orchestration
  * 
  * FIX #1 (Jan 7): Added total_contributed tracking to fix side pot calculation.
@@ -346,10 +347,12 @@ async function processNextAction(supabase: ReturnType<typeof createServiceClient
         console.log(`[All-In Showdown] Returning $${excess} excess to ${(activePlayer.agents as Agent)?.name}`)
         
         // Update player's chips and current bet
+        // Note: total_contributed may not exist on the type, so we use optional chaining with fallback
+        const currentContributed = (activePlayer as unknown as { total_contributed?: number }).total_contributed ?? activePlayer.current_bet
         await db.from('hand_agents').update({
           chip_count: activePlayer.chip_count + excess,
           current_bet: maxAllInBet,
-          total_contributed: (activePlayer as HandAgent & { total_contributed: number }).total_contributed - excess
+          total_contributed: currentContributed - excess
         }).eq('id', activePlayer.id)
         
         // Reduce pot by the excess

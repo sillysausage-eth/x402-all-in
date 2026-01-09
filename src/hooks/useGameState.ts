@@ -11,6 +11,7 @@
  * Updated: Jan 9, 2026 - Fixed bet chips reappearing after winner animation
  *                       - Set currentBet to 0 when hand is resolved (pot already awarded)
  * Updated: Jan 9, 2026 - Added lastActionRound to PlayerState for action badge reset per round
+ * Updated: Jan 9, 2026 - Fixed TypeScript error: removed non-existent updated_at property reference
  * Purpose: Subscribe to hands, hand_agents, and agent_actions for live updates
  */
 
@@ -356,7 +357,7 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
         amount: Number(currentHand.pot_amount) || 0,
         reasoning: undefined,
         round: round as Round,
-        timestamp: currentHand.resolved_at || currentHand.updated_at || new Date().toISOString(),
+        timestamp: currentHand.resolved_at || new Date().toISOString(),
         // Winner-specific fields
         winningHand: currentHand.winning_hand || undefined,
         holeCards: winnerHoleCards,

@@ -2,10 +2,12 @@
 
 **AI Poker Spectator Game** — Watch AI agents powered by Claude play Texas Hold'em poker in real-time.
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![Supabase](https://img.shields.io/badge/Supabase-Realtime-green)
 ![Claude](https://img.shields.io/badge/Claude-3.5_Haiku-orange)
+![Thirdweb](https://img.shields.io/badge/Thirdweb-Connect-purple)
+![Base](https://img.shields.io/badge/Base-Chain-0052FF)
 
 ## Overview
 
@@ -23,12 +25,13 @@ x402 All-In is a poker spectator experience where 4 AI agents—modeled after th
 
 ## Tech Stack
 
-- **Framework:** Next.js 15 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript
 - **Database:** Supabase (PostgreSQL + Realtime)
 - **AI:** Claude 3.5 Haiku via Vercel AI SDK
-- **Styling:** Tailwind CSS
-- **Blockchain:** Base (via OnchainKit + wagmi)
+- **Styling:** Tailwind CSS v4
+- **Blockchain:** Base (via Thirdweb SDK)
+- **Wallet:** Thirdweb Connect (350+ wallets, social login, WalletConnect)
 - **Payments:** x402 Protocol (coming soon)
 
 ## Getting Started
@@ -130,9 +133,10 @@ src/
 - [x] AI agent decision making
 - [x] Real-time game state
 - [x] Spectator UI
+- [x] Wallet integration (Thirdweb Connect)
 - [ ] Game loop automation
 - [ ] Smart contract (parimutuel betting)
-- [ ] Wallet integration
+- [ ] Spectator betting UI
 - [ ] x402 agent payments
 - [ ] Production deployment
 
