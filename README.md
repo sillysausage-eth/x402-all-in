@@ -1,36 +1,155 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# x402 All-In 🃏
+
+**AI Poker Spectator Game** — Watch AI agents powered by Claude play Texas Hold'em poker in real-time.
+
+![Next.js](https://img.shields.io/badge/Next.js-15-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![Supabase](https://img.shields.io/badge/Supabase-Realtime-green)
+![Claude](https://img.shields.io/badge/Claude-3.5_Haiku-orange)
+
+## Overview
+
+x402 All-In is a poker spectator experience where 4 AI agents—modeled after the hosts of [The All-In Podcast](https://www.allinpodcast.co/)—compete in Texas Hold'em. Each agent has a unique personality and decision-making style powered by Anthropic's Claude.
+
+**Live Demo:** [Coming Soon]
+
+### Features
+
+- 🎰 **Real-time Poker** — Watch hands play out with live chip updates, betting rounds, and showdowns
+- 🤖 **AI Personalities** — 4 unique agents: Chamath, Jason, Sacks, and Friedberg, each with distinct play styles
+- 💬 **Live Commentary** — See agent reasoning and thoughts as they make decisions
+- 🎲 **Spectator Betting** — Place bets on who will win each hand (coming soon via x402 Protocol)
+- ⛓️ **On-chain Integration** — Built for Base chain with parimutuel betting pools (in development)
+
+## Tech Stack
+
+- **Framework:** Next.js 15 (App Router)
+- **Language:** TypeScript
+- **Database:** Supabase (PostgreSQL + Realtime)
+- **AI:** Claude 3.5 Haiku via Vercel AI SDK
+- **Styling:** Tailwind CSS
+- **Blockchain:** Base (via OnchainKit + wagmi)
+- **Payments:** x402 Protocol (coming soon)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- pnpm (recommended) or npm
+- Supabase account
+- Anthropic API key
+
+### Installation
+
+1. **Clone the repository**
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/sillysausage-eth/x402-all-in.git
+cd x402-all-in
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. **Install dependencies**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm install
+# or
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. **Set up environment variables**
 
-## Learn More
+```bash
+cp .env.example .env.local
+```
 
-To learn more about Next.js, take a look at the following resources:
+Fill in your environment variables (see `.env.example` for required values).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. **Set up Supabase**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a new Supabase project and run the migrations in `supabase/migrations/` (if applicable), or set up the following tables:
 
-## Deploy on Vercel
+- `agents` — AI agent profiles
+- `games` — Game state
+- `hands` — Hand history
+- `hand_actions` — Action log per hand
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+5. **Run the development server**
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm dev
+# or
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to see the game.
+
+## Project Structure
+
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── page.tsx           # Main spectator view
+│   ├── about/             # About page
+│   └── api/               # API routes
+│       └── game/          # Game orchestration endpoints
+├── components/
+│   ├── poker/             # Game UI components
+│   │   ├── PokerTable.tsx # Main table with players
+│   │   ├── AgentCard.tsx  # Player boxes
+│   │   ├── ActionFeed.tsx # Live action log
+│   │   └── BettingPanel.tsx
+│   └── about/             # About page components
+├── hooks/                 # React hooks
+│   └── useGameState.ts    # Real-time game state
+├── lib/
+│   ├── ai/                # AI decision making
+│   │   └── agent-decision.ts
+│   ├── poker/             # Game engine
+│   │   ├── game-engine.ts # Core poker logic
+│   │   ├── hand-evaluator.ts
+│   │   └── deck.ts
+│   └── supabase/          # Database clients
+└── types/                 # TypeScript types
+    ├── agents.ts          # Agent personalities
+    └── poker.ts           # Poker types
+```
+
+## The Agents
+
+| Agent | Personality | Play Style |
+|-------|-------------|------------|
+| **Chamath** | Bold venture capitalist | Aggressive, loves big bluffs |
+| **Jason** | Energetic angel investor | Loose and action-oriented |
+| **Sacks** | Analytical operator | Tight, calculated decisions |
+| **Friedberg** | Data-driven scientist | Math-based, systematic |
+
+## Roadmap
+
+- [x] Core poker engine
+- [x] AI agent decision making
+- [x] Real-time game state
+- [x] Spectator UI
+- [ ] Game loop automation
+- [ ] Smart contract (parimutuel betting)
+- [ ] Wallet integration
+- [ ] x402 agent payments
+- [ ] Production deployment
+
+## Contributing
+
+Contributions are welcome! Please open an issue or PR.
+
+## License
+
+MIT
+
+## Credits
+
+- AI Agents powered by [Claude](https://www.anthropic.com/claude) (Anthropic)
+- Inspired by [The All-In Podcast](https://www.allinpodcast.co/)
+- Payments via [x402 Protocol](https://www.x402.org/)
+
+---
+
+Built with ♠️ by [@sillysausage-eth](https://github.com/sillysausage-eth)
