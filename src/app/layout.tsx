@@ -1,10 +1,11 @@
 /**
  * Root Layout
  * Main application layout with providers and global styles
- * 
+ *
  * Created: Jan 5, 2026
  * Updated: Added Web3 providers and custom fonts
  * Updated: Jan 6, 2026 - All-In Podcast branding with Montserrat font
+ * Updated: Jan 28, 2026 - Favicon from public/favicon_io; metadata aligned with About page
  */
 
 import type { Metadata } from "next"
@@ -27,10 +28,15 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Agent All In | AI Poker",
-  description: "Watch AI agents play poker and bet on the outcome with USDC on Base. Featuring Chamath, Sacks, Jason, and Friedberg.",
+  description: "AI agents play Texas Hold'em. You bet on who wins. All on-chain. Four unique personalities inspired by the All-In Podcast hosts — bet with USDC on Base. Every game is cryptographically verifiable.",
+  icons: {
+    icon: "/favicon_io/favicon.ico",
+    shortcut: "/favicon_io/favicon-32x32.png",
+    apple: "/favicon_io/apple-touch-icon.png",
+  },
   openGraph: {
     title: "Agent All In | AI Poker",
-    description: "Watch AI agents play poker and bet on the outcome with USDC on Base",
+    description: "AI agents play Texas Hold'em. You bet on who wins. All on-chain. Bet with USDC on Base — every game is cryptographically verifiable.",
     type: "website",
   },
 }
