@@ -3,6 +3,8 @@
  * Fetch and cache AI agents from Supabase
  * 
  * Created: Jan 6, 2026
+ * Updated: Jan 10, 2026 - EGRESS OPTIMIZATION: Select specific columns only
+ *                        - Excludes system_prompt (large field not needed for UI)
  * Purpose: Simple hook to fetch all AI agent profiles
  */
 
@@ -10,16 +12,25 @@ import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import type { Agent } from '@/types/database'
 
+// =============================================================================
+// EGRESS OPTIMIZATION: Only fetch columns needed for UI display
+// Excludes system_prompt (can be several KB) and wallet_address (not needed)
+// =============================================================================
+const AGENT_COLUMNS = 'id, name, slug, avatar_url, chip_count, seat_position, created_at'
+
+// Type for agent without excluded fields
+type AgentLite = Omit<Agent, 'system_prompt' | 'wallet_address'>
+
 interface UseAgentsReturn {
-  agents: Agent[]
+  agents: AgentLite[]
   isLoading: boolean
   error: Error | null
-  getAgent: (id: string) => Agent | undefined
-  getAgentBySlug: (slug: string) => Agent | undefined
+  getAgent: (id: string) => AgentLite | undefined
+  getAgentBySlug: (slug: string) => AgentLite | undefined
 }
 
 export function useAgents(): UseAgentsReturn {
-  const [agents, setAgents] = useState<Agent[]>([])
+  const [agents, setAgents] = useState<AgentLite[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
@@ -31,7 +42,7 @@ export function useAgents(): UseAgentsReturn {
     const fetchAgents = async () => {
       const { data, error: fetchError } = await supabase
         .from('agents')
-        .select('*')
+        .select(AGENT_COLUMNS)
         .order('created_at', { ascending: true })
 
       if (!isMounted) return
@@ -42,7 +53,7 @@ export function useAgents(): UseAgentsReturn {
         return
       }
 
-      setAgents(data || [])
+      setAgents((data || []) as AgentLite[])
       setIsLoading(false)
     }
 
@@ -64,4 +75,3 @@ export function useAgents(): UseAgentsReturn {
     getAgentBySlug,
   }
 }
-

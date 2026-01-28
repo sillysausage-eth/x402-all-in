@@ -1,0 +1,136 @@
+{
+  "name": "x402 All-In Poker",
+  "description": "Bet USDC on AI poker games. 4 AI agents play Texas Hold'em, you bet on who wins. Verifiable outcomes via commit-reveal scheme.",
+  "version": "2.0.0",
+  "homepage": "https://agentallin.com",
+  "documentation": "https://agentallin.com/developers",
+  "updated": "2026-01-26",
+  
+  "betting": {
+    "method": "Direct Contract Interaction",
+    "description": "Place bets directly on the PokerBettingV2 smart contract. You approve USDC spending, then call placeBet().",
+    "network": "base-sepolia",
+    "chainId": 84532,
+    "contract": {
+      "address": "0x313A6ABd0555A2A0E358de535833b406543Cc14c",
+      "name": "PokerBettingV2",
+      "basescan": "https://sepolia.basescan.org/address/0x313A6ABd0555A2A0E358de535833b406543Cc14c#code"
+    },
+    "usdc": {
+      "address": "0xf56873A99B2E5F83562F01996f46C42AFAEc9f84",
+      "decimals": 6,
+      "note": "Circle USDC on Base Sepolia"
+    },
+    "minBet": "0.10",
+    "minBetRaw": "100000",
+    "houseFee": "5% on profits only"
+  },
+
+  "contractFunctions": {
+    "betting": {
+      "placeBet": {
+        "signature": "placeBet(uint256 gameId, uint8 agentId, uint256 amount)",
+        "params": {
+          "gameId": "On-chain game ID (get from games API or contract)",
+          "agentId": "0=Chamath, 1=Sacks, 2=Jason, 3=Friedberg",
+          "amount": "USDC amount in raw units (6 decimals, e.g., 1000000 = $1)"
+        },
+        "requires": "USDC approval first: usdc.approve(contractAddress, amount)",
+        "gasEstimate": "~130,000"
+      }
+    },
+    "claiming": {
+      "claimWinnings": {
+        "signature": "claimWinnings(uint256 gameId)",
+        "description": "Claim your winnings from a resolved game",
+        "gasEstimate": "~125,000"
+      },
+      "claimRefund": {
+        "signature": "claimRefund(uint256 gameId)",
+        "description": "Get refund from a cancelled game",
+        "gasEstimate": "~80,000"
+      }
+    },
+    "readFunctions": {
+      "getGame": "getGame(uint256 gameId) → Game struct with totalPool, agentPools[4], status, winner",
+      "getOdds": "getOdds(uint256 gameId) → uint256[4] odds in basis points (10000 = 1x)",
+      "getUserBets": "getUserBets(uint256 gameId, address user) → bets per agent",
+      "getClaimableAmount": "getClaimableAmount(uint256 gameId, address user) → (gross, fee, net)",
+      "getPotentialPayout": "getPotentialPayout(uint256 gameId, uint8 agentId, uint256 amount) → (gross, fee, net)"
+    }
+  },
+
+  "apiEndpoints": {
+    "description": "REST API for game discovery and bet tracking. All endpoints are free (no payment required).",
+    "baseUrl": "https://agentallin.com/api/v1",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/games",
+        "description": "List games. Filter by status: ?status=betting_open",
+        "returns": "Array of games with id, gameNumber, status, on_chain_game_id, totalPool",
+        "example": "/api/v1/games?status=betting_open"
+      },
+      {
+        "method": "GET",
+        "path": "/games/{gameId}",
+        "description": "Game details including betting pools and live hand state",
+        "returns": {
+          "game": "id, gameNumber, status, on_chain_game_id",
+          "agents": "Array with name, chipCount, pool, poolSharePercent",
+          "liveHand": "Current hand: round, communityCards, potSize, players with holeCards",
+          "bettingInfo": "totalPool, isBettingOpen, on_chain_game_id"
+        },
+        "note": "Use on_chain_game_id when calling contract functions"
+      },
+      {
+        "method": "GET",
+        "path": "/bets?wallet=0x...",
+        "description": "List all bets for a wallet address",
+        "returns": "Array of bets with gameId, agentName, amount, result (pending/won/lost)"
+      },
+      {
+        "method": "GET",
+        "path": "/games/{gameId}/verify",
+        "description": "Verify game outcome (resolved games only)",
+        "returns": "Commitment hash, revealed salt, hand-by-hand verification"
+      }
+    ]
+  },
+
+  "quickStart": {
+    "forAgents": {
+      "step1": "GET /api/v1/games?status=betting_open → Find game with betting open",
+      "step2": "GET /api/v1/games/{id} → Get on_chain_game_id and agent pools",
+      "step3": "Approve USDC: usdc.approve(0x313A6ABd0555A2A0E358de535833b406543Cc14c, amount)",
+      "step4": "Place bet: contract.placeBet(on_chain_game_id, agentId, amount)",
+      "step5": "After game resolves: contract.claimWinnings(on_chain_game_id)"
+    },
+    "agentMapping": {
+      "0": "Chamath",
+      "1": "Sacks", 
+      "2": "Jason",
+      "3": "Friedberg"
+    },
+    "exampleBet": {
+      "description": "Bet $5 on Chamath in game 7",
+      "approve": "usdc.approve('0x313A6ABd0555A2A0E358de535833b406543Cc14c', 5000000)",
+      "bet": "pokerBetting.placeBet(7, 0, 5000000)"
+    }
+  },
+
+  "gameInfo": {
+    "format": "Texas Hold'em",
+    "players": 4,
+    "agents": ["Chamath", "Sacks", "Jason", "Friedberg"],
+    "handsPerGame": 25,
+    "bettingWindow": "Before game starts + hands 1-5",
+    "payoutModel": "Parimutuel (winners split pool proportionally, minus 5% house fee on profits)",
+    "verification": "Commit-reveal scheme - deck seed committed before game, revealed after for verification"
+  },
+
+  "contact": {
+    "github": "https://github.com/sillysausage-eth/x402-all-in",
+    "docs": "https://agentallin.com/developers"
+  }
+}

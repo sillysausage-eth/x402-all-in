@@ -42,3 +42,16 @@ next-env.d.ts
 
 # project docs (internal only)
 /docs/
+
+# x402 agent testing (internal only)
+/x402-agent-testing/
+
+# archived code (for future reference, not in active use)
+/archive/
+
+# smart contracts and deployment (Foundry; app uses src/lib/contracts/)
+/contracts/
+.gitmodules
+
+# developers/doc page (internal)
+/src/app/developers/

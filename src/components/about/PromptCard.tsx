@@ -4,6 +4,7 @@
  * 
  * Created: Jan 9, 2026
  * Updated: Jan 9, 2026 - Removed agent badges, moved name to header, full card clickable
+ * Updated: Jan 14, 2026 - Unified design patterns with Metrics (neutral colors)
  * 
  * Features:
  * - Collapsible with smooth animation
@@ -39,15 +40,15 @@ export function PromptCard({ name, slug, prompt }: PromptCardProps) {
   
   return (
     <div 
-      className="rounded-xl border border-border overflow-hidden bg-background-card cursor-pointer hover:border-border-bright transition-colors"
+      className="rounded-xl border border-neutral-800 overflow-hidden bg-black cursor-pointer hover:border-neutral-700 transition-colors"
       onClick={() => setIsExpanded(!isExpanded)}
     >
       {/* File Header - GitHub style */}
-      <div className="w-full flex items-center justify-between px-4 py-3 bg-background-elevated border-b border-border">
+      <div className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900 border-b border-neutral-800">
         <div className="flex items-center gap-3">
           {/* File icon */}
           <svg 
-            className="w-4 h-4 text-foreground-muted" 
+            className="w-4 h-4 text-neutral-500" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -62,18 +63,18 @@ export function PromptCard({ name, slug, prompt }: PromptCardProps) {
           <span className="text-sm font-medium text-white">
             {name}
           </span>
-          <span className="text-xs text-foreground-muted">
+          <span className="text-xs text-neutral-500">
             {slug}.prompt.txt · {charCount} chars · {lineCount} lines
           </span>
         </div>
         
         {/* Expand/Collapse indicator */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-foreground-muted">
+          <span className="text-xs text-neutral-500">
             {isExpanded ? 'collapse' : 'expand'}
           </span>
           <motion.svg
-            className="w-4 h-4 text-foreground-muted"
+            className="w-4 h-4 text-neutral-500"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -98,7 +99,7 @@ export function PromptCard({ name, slug, prompt }: PromptCardProps) {
             className="overflow-hidden"
           >
             <div className="px-4 py-3">
-              <p className="text-sm text-foreground-muted truncate">
+              <p className="text-sm text-neutral-400 truncate">
                 {preview}
               </p>
             </div>
@@ -121,11 +122,11 @@ export function PromptCard({ name, slug, prompt }: PromptCardProps) {
                   className="flex hover:bg-white/5 transition-colors"
                 >
                   {/* Line number */}
-                  <div className="w-12 flex-shrink-0 px-3 py-1 text-right text-foreground-muted/50 select-none border-r border-border/30">
+                  <div className="w-12 flex-shrink-0 px-3 py-1 text-right text-neutral-600 select-none border-r border-neutral-800/50">
                     {index + 1}
                   </div>
                   {/* Line content */}
-                  <div className="px-4 py-1 text-foreground-muted whitespace-pre-wrap">
+                  <div className="px-4 py-1 text-neutral-400 whitespace-pre-wrap">
                     {line}
                   </div>
                 </div>
@@ -133,7 +134,7 @@ export function PromptCard({ name, slug, prompt }: PromptCardProps) {
             </div>
             
             {/* Footer */}
-            <div className="px-4 py-2 border-t border-border/50 text-xs text-foreground-muted/50">
+            <div className="px-4 py-2 border-t border-neutral-800/50 text-xs text-neutral-600">
               System prompt for {name}&apos;s AI personality
             </div>
           </motion.div>

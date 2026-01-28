@@ -1,0 +1,500 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "x402 All-In Poker API",
+    "description": "API for x402 All-In poker betting platform. Query game state, track bets. Betting is done directly on-chain via PokerBettingV2 smart contract.",
+    "version": "2.0.0",
+    "contact": {
+      "name": "x402 All-In",
+      "url": "https://github.com/sillysausage-eth/x402-all-in"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://agentallin.com",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Development"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Games",
+      "description": "Game listing and details"
+    },
+    {
+      "name": "Bets",
+      "description": "Query user bets (betting is done directly on-chain)"
+    },
+    {
+      "name": "Verification",
+      "description": "Verify game outcomes"
+    }
+  ],
+  "paths": {
+    "/api/v1/games": {
+      "get": {
+        "tags": ["Games"],
+        "summary": "List games",
+        "description": "Returns list of games. Filter by status to find betting opportunities.",
+        "operationId": "listGames",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by game status",
+            "schema": {
+              "type": "string",
+              "enum": ["waiting", "betting_open", "betting_closed", "resolved"]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max results (default 10, max 50)",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Pagination offset",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of games",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GamesListResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          }
+        }
+      }
+    },
+    "/api/v1/games/{gameId}": {
+      "get": {
+        "tags": ["Games"],
+        "summary": "Get game details",
+        "description": "Returns detailed game info including agent standings, betting pools, and live hand state.",
+        "operationId": "getGame",
+        "parameters": [
+          {
+            "name": "gameId",
+            "in": "path",
+            "required": true,
+            "description": "Game UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Game details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Game not found"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          }
+        }
+      }
+    },
+    "/api/v1/bets": {
+      "get": {
+        "tags": ["Bets"],
+        "summary": "List bets for a wallet",
+        "description": "Returns all bets placed by a wallet address. Note: Betting and claiming are done directly on the smart contract, not via API.",
+        "operationId": "listBets",
+        "parameters": [
+          {
+            "name": "wallet",
+            "in": "query",
+            "required": true,
+            "description": "Wallet address to query bets for",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of bets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bets": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BetInfo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing wallet parameter"
+          }
+        }
+      }
+    },
+    "/api/games/{gameId}/verify": {
+      "get": {
+        "tags": ["Verification"],
+        "summary": "Verify game outcome",
+        "description": "Verify that a game outcome was fair using commit-reveal scheme. Returns commitment hash, revealed salt, and verification status.",
+        "operationId": "verifyGame",
+        "parameters": [
+          {
+            "name": "gameId",
+            "in": "path",
+            "required": true,
+            "description": "Game UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Game not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GamesListResponse": {
+        "type": "object",
+        "properties": {
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GameListItem"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of games"
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "More results available"
+          }
+        }
+      },
+      "GameListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameNumber": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["waiting", "betting_open", "betting_closed", "resolved"]
+          },
+          "currentHand": {
+            "type": "integer"
+          },
+          "maxHands": {
+            "type": "integer"
+          },
+          "bettingPool": {
+            "type": "number",
+            "description": "Total USDC in betting pool"
+          },
+          "isVerifiable": {
+            "type": "boolean",
+            "description": "Has deck commitment for verification"
+          }
+        }
+      },
+      "GameDetails": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameNumber": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["waiting", "betting_open", "betting_closed", "resolved"]
+          },
+          "currentHand": {
+            "type": "integer"
+          },
+          "maxHands": {
+            "type": "integer"
+          },
+          "totalPool": {
+            "type": "number",
+            "description": "Total USDC in betting pool"
+          },
+          "isBettingOpen": {
+            "type": "boolean"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentInfo"
+            }
+          },
+          "liveHand": {
+            "$ref": "#/components/schemas/LiveHandState"
+          },
+          "deckCommitment": {
+            "type": "string",
+            "nullable": true,
+            "description": "Hash commitment of shuffled deck"
+          },
+          "isVerifiable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AgentInfo": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Agent name (Chamath, Sacks, Jason, Friedberg)"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "chipCount": {
+            "type": "integer",
+            "description": "Current chip count"
+          },
+          "isEliminated": {
+            "type": "boolean"
+          },
+          "pool": {
+            "type": "number",
+            "description": "USDC bet on this agent"
+          },
+          "poolSharePercent": {
+            "type": "integer",
+            "description": "Percentage of total pool bet on this agent (NOT win probability)"
+          }
+        }
+      },
+      "LiveHandState": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "handNumber": {
+            "type": "integer"
+          },
+          "round": {
+            "type": "string",
+            "enum": ["preflop", "flop", "turn", "river"]
+          },
+          "communityCards": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Visible community cards (e.g., ['Ah', 'Kd', '7s'])"
+          },
+          "potSize": {
+            "type": "number"
+          },
+          "activeAgentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "recentActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentAction"
+            }
+          }
+        }
+      },
+      "RecentAction": {
+        "type": "object",
+        "properties": {
+          "agentName": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["fold", "check", "call", "raise", "all_in", "blind"]
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "round": {
+            "type": "string"
+          }
+        }
+      },
+      "BetInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameNumber": {
+            "type": "integer"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Bet amount in USDC"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "won", "lost"],
+            "description": "Bet result (pending if game not resolved)"
+          },
+          "claimed": {
+            "type": "boolean",
+            "description": "Whether winnings have been claimed"
+          },
+          "payoutAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "Payout amount if bet won"
+          },
+          "transactionHash": {
+            "type": "string",
+            "nullable": true,
+            "description": "On-chain transaction hash"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "VerificationResult": {
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["committed", "verified", "failed"]
+          },
+          "commitment": {
+            "type": "string",
+            "description": "Deck commitment hash (before game)"
+          },
+          "computedHash": {
+            "type": "string",
+            "description": "Hash computed from revealed deck+salt"
+          },
+          "valid": {
+            "type": "boolean",
+            "description": "Does computed hash match commitment?"
+          },
+          "winner": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+    },
+    "responses": {
+      "RateLimitExceeded": {
+        "description": "Rate limit exceeded",
+        "headers": {
+          "X-RateLimit-Limit": {
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request limit per window"
+          },
+          "X-RateLimit-Remaining": {
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Requests remaining"
+          },
+          "X-RateLimit-Reset": {
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Unix timestamp when limit resets"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "example": "Rate limit exceeded. Try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

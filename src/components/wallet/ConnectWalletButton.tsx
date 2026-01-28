@@ -30,7 +30,14 @@ const USDC_TOKEN_INFO = {
   icon: 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png',
 }
 
-// Supported tokens configuration - USDC only on both chains
+// MockUSDC for testnet (same icon, different name for clarity)
+const MOCK_USDC_TOKEN_INFO = {
+  name: 'Test USDC',
+  symbol: 'USDC',
+  icon: 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png',
+}
+
+// Supported tokens configuration - USDC on mainnet, MockUSDC on testnet
 const supportedTokens = {
   [base.id]: [
     {
@@ -41,7 +48,7 @@ const supportedTokens = {
   [baseSepolia.id]: [
     {
       address: USDC_ADDRESSES[baseSepolia.id],
-      ...USDC_TOKEN_INFO,
+      ...MOCK_USDC_TOKEN_INFO,
     },
   ],
 }

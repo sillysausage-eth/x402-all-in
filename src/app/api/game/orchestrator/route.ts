@@ -6,6 +6,23 @@
  * Updated: Jan 7, 2026 - Fixed winner determination + all-in showdown bugs
  * Updated: Jan 7, 2026 - Added comprehensive showdown logging for ALL player hands
  * Updated: Jan 9, 2026 - Fixed TypeScript error in all-in showdown excess return logic
+ * Updated: Jan 14, 2026 - CRITICAL: Added on-chain game resolution when game completes
+ *                        - Previously only updated Supabase, leaving on-chain game "Open"
+ *                        - Now calls resolveOnChainGame() after marking game resolved
+ * Updated: Jan 23, 2026 - CRITICAL FIX: Must call closeBetting() before resolveGame()
+ *                        - V2 contract requires status transition: Open → Closed → Resolved
+ *                        - Added closeOnChainBetting() call before resolveOnChainGame()
+ * Updated: Jan 16, 2026 - Added x402 agent payments after hand resolution
+ *                        - When ENABLE_X402_PAYMENTS=true, losers pay winner in USDC
+ *                        - Uses Thirdweb Backend Wallets for each agent
+ * Updated: Jan 26, 2026 - BUGFIX: Check on-chain status before calling closeBetting
+ *                        - Session route closes betting after hand 2, orchestrator
+ *                        - was trying to close again at game end, causing double-close error
+ *                        - Now checks status and skips closeBetting if already Closed
+ * Updated: Jan 26, 2026 - CRITICAL FIX: Added betting close check to startNewHand()
+ *                        - Previously only session route closed betting, but orchestrator
+ *                        - could start hands directly without going through session route
+ *                        - Now checks and closes betting in both places
  * Purpose: Server-side game loop orchestration
  * 
  * FIX #1 (Jan 7): Added total_contributed tracking to fix side pot calculation.
@@ -35,15 +52,19 @@ import {
   dealTurn,
   dealRiver 
 } from '@/lib/poker/deck'
+import { getDeckForHand, createActionLogEntry, type ActionLogEntry } from '@/lib/poker/verifiable'
 import { determineWinners, evaluateHand } from '@/lib/poker/hand-evaluator'
 import type { DecisionContext, OpponentState, RecentAction } from '@/types/agents'
 import type { Hand, HandAgent, Agent, AgentAction } from '@/types/database'
 import type { CardNotation, Round } from '@/types/poker'
+import { closeOnChainBetting, resolveOnChainGame, agentIdToContractIndex, isServerWalletConfigured, getOnChainGameStatus, OnChainGameStatus } from '@/lib/contracts/admin'
+import '@/lib/agents'
 
 const SMALL_BLIND = 10
 const BIG_BLIND = 20
 const STARTING_CHIPS = 1000
 const BETTING_WINDOW_SECONDS = 20
+const BETTING_CLOSES_AFTER_HAND = 2 // Must match session route - betting closes after hand 2
 
 interface OrchestratorRequest {
   action: 'start_hand' | 'next_action' | 'advance_round' | 'auto_play'
@@ -104,30 +125,118 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
   // Capture the lobby ID for use in queries
   const currentLobbyId = lobbyData.id
 
-  // Get all agents
-  const agentsResult = await supabase.from('agents').select('*').order('created_at')
-  const agents = agentsResult.data as Agent[] | null
-  if (!agents || agents.length < 2) {
-    return NextResponse.json({ error: 'Not enough agents' }, { status: 400 })
+  // Get the current active game for this lobby (including salt for verifiable deck)
+  const activeGameResult = await supabase
+    .from('games')
+    .select('id, game_number, status, current_hand_number, max_hands, salt_reveal, on_chain_game_id')
+    .eq('lobby_id', currentLobbyId)
+    .in('status', ['waiting', 'betting_open', 'betting_closed'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+  
+  const activeGame = activeGameResult.data as { 
+    id: string; 
+    game_number: number; 
+    status: string; 
+    current_hand_number: number;
+    max_hands: number;
+    salt_reveal: string | null;
+    on_chain_game_id: number | null;
+  } | null
+  
+  // If no active game, return error - games must be created via /api/game/session
+  if (!activeGame) {
+    return NextResponse.json({ 
+      error: 'No active game session. Create a new game first.',
+      action: 'create_game'
+    }, { status: 400 })
+  }
+  
+  // Check if game has reached max hands
+  const maxHands = activeGame.max_hands || 25
+  if (activeGame.current_hand_number >= maxHands) {
+    return NextResponse.json({ 
+      error: `Game #${activeGame.game_number} has reached max hands (${maxHands})`,
+      gameId: activeGame.id,
+      action: 'game_complete'
+    }, { status: 400 })
   }
 
-  // Get previous hand info (hand number and dealer position)
+  // Get all agents ordered by their FIXED seat_position
+  // This ensures consistent ordering regardless of query execution
+  const agentsResult = await supabase.from('agents').select('*').order('seat_position')
+  const allAgents = agentsResult.data as (Agent & { seat_position: number })[] | null
+  if (!allAgents || allAgents.length < 2) {
+    return NextResponse.json({ error: 'Not enough agents' }, { status: 400 })
+  }
+  
+  // Filter out bust agents (chip_count <= 0) - they can't participate
+  const agents = allAgents.filter(a => (a.chip_count ?? STARTING_CHIPS) > 0)
+  if (agents.length < 2) {
+    return NextResponse.json({ 
+      error: 'Not enough active agents (need at least 2 with chips)',
+      eliminated: allAgents.filter(a => (a.chip_count ?? 0) <= 0).map(a => a.name)
+    }, { status: 400 })
+  }
+
+  // Get previous hand info FOR THIS GAME (hand number and dealer position)
+  // Hand numbers are PER-GAME (1-25), not global
   const lastHandResult = await supabase
     .from('hands')
     .select('hand_number, dealer_position')
-    .eq('lobby_id', currentLobbyId)
+    .eq('game_id', activeGame.id)
     .order('hand_number', { ascending: false })
     .limit(1)
     .single()
   
   const lastHand = lastHandResult.data as { hand_number: number; dealer_position: number } | null
 
+  // Hand number within THIS game (1-25)
   const handNumber = (lastHand?.hand_number || 0) + 1
-  // Rotate dealer clockwise (0 → 1 → 2 → 3 → 0)
-  const dealerPosition = lastHand ? (lastHand.dealer_position + 1) % agents.length : 0
+  
+  // Double-check we haven't exceeded max hands
+  if (handNumber > maxHands) {
+    return NextResponse.json({ 
+      error: `Game #${activeGame.game_number} complete - reached ${maxHands} hands`,
+      gameId: activeGame.id,
+      action: 'game_complete'
+    }, { status: 400 })
+  }
+  
+  console.log(`[Game #${activeGame.game_number}] Starting hand ${handNumber}/${maxHands}`)
+  
+  // Get active seat positions (seats with non-bust agents)
+  const activeSeatPositions = agents.map(a => (a as Agent & { seat_position: number }).seat_position ?? 0).sort((a, b) => a - b)
+  
+  // Find next dealer position (rotating among ACTIVE seats only)
+  // dealer_position stores the SEAT number (0-3), not array index
+  let dealerSeatPosition: number
+  if (lastHand) {
+    const lastDealerSeat = lastHand.dealer_position
+    // Find the next active seat after the last dealer
+    const nextSeats = activeSeatPositions.filter(s => s > lastDealerSeat)
+    const wrapSeats = activeSeatPositions.filter(s => s <= lastDealerSeat)
+    // Prefer next higher seat, wrap around if needed
+    dealerSeatPosition = nextSeats.length > 0 ? nextSeats[0] : wrapSeats[0]
+  } else {
+    // First hand - dealer is the first active seat
+    dealerSeatPosition = activeSeatPositions[0]
+  }
+  
+  // Find the index within the filtered agents array for this dealer seat
+  const dealerIndex = agents.findIndex(a => (a as Agent & { seat_position: number }).seat_position === dealerSeatPosition)
 
-  // Create deck and deal all cards upfront
-  const deck = createShuffledDeck()
+  // Create deck - use seeded shuffle if game has salt_reveal (verifiable game)
+  // Otherwise fall back to random shuffle (for backwards compatibility)
+  const deck = activeGame?.salt_reveal 
+    ? getDeckForHand(activeGame.salt_reveal, handNumber)
+    : createShuffledDeck()
+  
+  if (activeGame?.salt_reveal) {
+    console.log(`[Hand #${handNumber}] Using verifiable seeded deck (commitment: ${activeGame.salt_reveal.slice(0, 8)}...)`)
+  }
+  
   const [holeCards, afterHoleCards] = dealHoleCards(deck, agents.length)
   const [flopCards, afterFlop] = dealFlop(afterHoleCards)
   const [turnCard, afterTurn] = dealTurn(afterFlop)
@@ -146,6 +255,7 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
     .from('hands')
     .insert({
       lobby_id: currentLobbyId,
+      game_id: activeGame?.id || null, // Link to current game session if active
       hand_number: handNumber,
       status: 'betting_open',
       pot_amount: SMALL_BLIND + BIG_BLIND,
@@ -154,8 +264,8 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
       community_cards: allCommunityCards,
       // Start at preflop - no community cards revealed yet
       current_round: 'preflop',
-      // Track dealer position for proper action order
-      dealer_position: dealerPosition,
+      // Track dealer position (SEAT number, not array index) for proper action order
+      dealer_position: dealerSeatPosition,
     })
     .select()
     .single()
@@ -166,32 +276,74 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
     return NextResponse.json({ error: 'Failed to create hand' }, { status: 500 })
   }
 
+  // Update game's current_hand_number if linked to a game session
+  if (activeGame?.id) {
+    await db.from('games').update({ 
+      current_hand_number: handNumber 
+    }).eq('id', activeGame.id)
+    
+    // CRITICAL: Check if betting should close after this hand starts
+    // Betting closes after BETTING_CLOSES_AFTER_HAND (e.g., after hand 2 completes, close before hand 3)
+    if (handNumber > BETTING_CLOSES_AFTER_HAND && activeGame.status === 'betting_open') {
+      // Update database status
+      await db.from('games').update({
+        status: 'betting_closed',
+        betting_closed_at: new Date().toISOString(),
+      }).eq('id', activeGame.id)
+      
+      console.log(`[Game #${activeGame.game_number}] Betting closed after hand ${BETTING_CLOSES_AFTER_HAND}`)
+      
+      // Close betting on-chain
+      if (activeGame.on_chain_game_id !== null && isServerWalletConfigured()) {
+        try {
+          const onChainGameId = BigInt(activeGame.on_chain_game_id)
+          const currentStatus = await getOnChainGameStatus(onChainGameId)
+          
+          if (currentStatus === OnChainGameStatus.BettingOpen) {
+            await closeOnChainBetting(onChainGameId)
+            console.log(`[Game #${activeGame.game_number}] On-chain betting closed`)
+          } else {
+            console.log(`[Game #${activeGame.game_number}] On-chain betting already closed (status: ${currentStatus})`)
+          }
+        } catch (err) {
+          console.error('[Game] Failed to close on-chain betting:', err)
+          // Non-fatal - continue with game
+        }
+      }
+    }
+  }
+
   // Create hand_agents with dealt cards
-  // Blinds are relative to dealer position:
-  // - Small Blind = (dealer + 1) % numPlayers
-  // - Big Blind = (dealer + 2) % numPlayers
+  // Blinds are relative to dealer's INDEX in the active agents array
+  // - Small Blind = (dealerIndex + 1) % numPlayers
+  // - Big Blind = (dealerIndex + 2) % numPlayers
   const numPlayers = agents.length
-  const smallBlindSeat = (dealerPosition + 1) % numPlayers
-  const bigBlindSeat = (dealerPosition + 2) % numPlayers
+  const smallBlindIndex = (dealerIndex + 1) % numPlayers
+  const bigBlindIndex = (dealerIndex + 2) % numPlayers
   
   // Update hand with SB/BB agent IDs for UI display
   await db.from('hands').update({
-    small_blind_agent_id: agents[smallBlindSeat].id,
-    big_blind_agent_id: agents[bigBlindSeat].id,
+    small_blind_agent_id: agents[smallBlindIndex].id,
+    big_blind_agent_id: agents[bigBlindIndex].id,
   }).eq('id', hand.id)
   
   const handAgentsData = agents.map((agent, index) => {
-    const isSmallBlind = index === smallBlindSeat
-    const isBigBlind = index === bigBlindSeat
+    const isSmallBlind = index === smallBlindIndex
+    const isBigBlind = index === bigBlindIndex
     
-    // Use persistent chip count from agents table (not STARTING_CHIPS)
-    const agentChipCount = (agent as Agent & { chip_count: number }).chip_count || STARTING_CHIPS
+    // Use persistent chip count from agents table
+    // IMPORTANT: Use ?? (nullish coalescing) NOT || to avoid resetting 0 chips to STARTING_CHIPS
+    const agentChipCount = (agent as Agent & { chip_count: number }).chip_count ?? STARTING_CHIPS
     const blindAmount = isSmallBlind ? SMALL_BLIND : isBigBlind ? BIG_BLIND : 0
+    
+    // Use the agent's FIXED seat_position from the database, not the array index
+    // This ensures agents always appear in the same corner of the table
+    const agentSeatPosition = (agent as Agent & { seat_position: number }).seat_position ?? index
     
     return {
       hand_id: hand.id,
       agent_id: agent.id,
-      seat_position: index,
+      seat_position: agentSeatPosition,
       hole_cards: holeCards[index],
       chip_count: agentChipCount - blindAmount,
       current_bet: blindAmount,
@@ -210,8 +362,10 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
 
   // Record blind posts as actions so turn order logic works correctly
   // SB and BB are "forced bets" - they're recorded so we know BB option should apply
-  const sbAgentId = agents[smallBlindSeat].id
-  const bbAgentId = agents[bigBlindSeat].id
+  const sbAgent = agents[smallBlindIndex]
+  const bbAgent = agents[bigBlindIndex]
+  const sbAgentId = sbAgent.id
+  const bbAgentId = bbAgent.id
   
   await db.from('agent_actions').insert([
     {
@@ -232,12 +386,24 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
     },
   ])
   
-  // Set UTG as the first active player
-  const utgSeat = (dealerPosition + 3) % numPlayers
-  const utgAgentId = agents[utgSeat].id
+  // Also log blinds to game's action_log for verifiable games
+  if (activeGame?.id) {
+    await appendToActionLog(supabase, activeGame.id, createActionLogEntry(
+      handNumber, sbAgent.slug, 'blind', 'preflop', SMALL_BLIND
+    ))
+    await appendToActionLog(supabase, activeGame.id, createActionLogEntry(
+      handNumber, bbAgent.slug, 'blind', 'preflop', BIG_BLIND
+    ))
+  }
+  
+  // Set UTG as the first active player (3 seats after dealer in clockwise order)
+  const utgIndex = (dealerIndex + 3) % numPlayers
+  const utgAgentId = agents[utgIndex].id
   await db.from('hands').update({ active_agent_id: utgAgentId }).eq('id', hand.id)
   
-  console.log(`Hand #${handNumber} started. Dealer: seat ${dealerPosition}, SB: seat ${smallBlindSeat}, BB: seat ${bigBlindSeat}, UTG: seat ${utgSeat}`)
+  // Get seat positions for logging
+  const getSeat = (idx: number) => (agents[idx] as Agent & { seat_position: number }).seat_position
+  console.log(`Hand #${handNumber} started. Dealer: seat ${dealerSeatPosition}, SB: seat ${getSeat(smallBlindIndex)}, BB: seat ${getSeat(bigBlindIndex)}, UTG: seat ${getSeat(utgIndex)}`)
   
   return NextResponse.json({
     success: true,
@@ -245,7 +411,7 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
     handNumber,
     status: 'betting_open',
     bettingClosesAt,
-    dealerPosition,
+    dealerPosition: dealerSeatPosition,
     message: `Hand #${handNumber} started. Betting window open for ${BETTING_WINDOW_SECONDS} seconds.`
   })
 }
@@ -449,7 +615,8 @@ async function processNextAction(supabase: ReturnType<typeof createServiceClient
     agentToAct,
     decision.action,
     decision.internalThoughts,
-    round
+    round,
+    agent.slug // For action logging
   )
   
   console.log(`[Hand ${hand.hand_number}] After action - pot: $${result.newPot}, ${agent.name} chips: $${result.newChipCount}, bet: $${result.newCurrentBet}`)
@@ -593,6 +760,35 @@ function getPosition(seatPosition: number, totalPlayers: number): DecisionContex
 }
 
 /**
+ * Append an action to the game's action_log for verifiable games
+ */
+async function appendToActionLog(
+  supabase: ReturnType<typeof createServiceClient>,
+  gameId: string | null,
+  entry: ActionLogEntry
+) {
+  if (!gameId) return // No game to log to
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any
+  
+  // Get current action_log
+  const { data: game } = await db
+    .from('games')
+    .select('action_log')
+    .eq('id', gameId)
+    .single()
+  
+  const currentLog = (game?.action_log || []) as ActionLogEntry[]
+  
+  // Append new entry
+  await db
+    .from('games')
+    .update({ action_log: [...currentLog, entry] })
+    .eq('id', gameId)
+}
+
+/**
  * Apply an action to the game state
  */
 async function applyAction(
@@ -601,7 +797,8 @@ async function applyAction(
   handAgent: HandAgent,
   action: { type: string; amount?: number },
   reasoning: string,
-  round: Round
+  round: Round,
+  agentSlug?: string // For action logging
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any
@@ -782,7 +979,7 @@ async function applyAction(
     // fold and check have no amount
   }
 
-  // Record action
+  // Record action to agent_actions table
   await db
     .from('agent_actions')
     .insert({
@@ -793,6 +990,21 @@ async function applyAction(
       reasoning,
       round,
     })
+
+  // Also append to game's action_log for verifiable games
+  if (agentSlug && (hand as Hand & { game_id: string | null }).game_id) {
+    await appendToActionLog(
+      db,
+      (hand as Hand & { game_id: string | null }).game_id,
+      createActionLogEntry(
+        hand.hand_number,
+        agentSlug,
+        action.type,
+        round,
+        recordedAmount || undefined
+      )
+    )
+  }
 
   return {
     newChipCount,
@@ -1201,6 +1413,90 @@ async function resolveHand(
   let totalDistributed = 0
   winnings.forEach(amount => totalDistributed += amount)
 
+  // NOTE: x402 agent payments removed - agents now use virtual chips only
+  // Real money transactions happen via external betting API (Phase 3)
+
+  // CHECK FOR GAME COMPLETION
+  // A game ends when: max hands reached OR only 1 player has chips
+  let gameCompleted = false
+  let gameWinnerId: string | null = null
+  let gameWinnerName: string | null = null
+  
+  if (hand.game_id) {
+    // Get game info
+    const gameResult = await db.from('games').select('*').eq('id', hand.game_id).single()
+    const game = gameResult.data
+    
+    if (game && game.status !== 'resolved') {
+      const maxHands = game.max_hands || 25
+      
+      // Get updated agent chip counts
+      const agentsResult = await db.from('agents').select('id, name, chip_count').order('chip_count', { ascending: false })
+      const agents = agentsResult.data || []
+      const playersWithChips = agents.filter((a: { chip_count: number }) => a.chip_count > 0)
+      
+      // Check if game should end
+      const isLastHand = hand.hand_number >= maxHands
+      const onlyOnePlayerLeft = playersWithChips.length <= 1
+      
+      if (isLastHand || onlyOnePlayerLeft) {
+        gameCompleted = true
+        
+        // Winner is player with most chips
+        const gameWinner = agents[0] // Already sorted by chip_count desc
+        gameWinnerId = gameWinner?.id || null
+        gameWinnerName = gameWinner?.name || null
+        
+        // Update game as resolved
+        await db.from('games').update({
+          status: 'resolved',
+          winner_agent_id: gameWinnerId,
+          resolved_at: new Date().toISOString()
+        }).eq('id', hand.game_id)
+        
+        const reason = isLastHand ? `reached ${maxHands} hands` : 'only one player remaining'
+        console.log(`[Game #${game.game_number}] COMPLETE - ${gameWinnerName} wins! (${reason})`)
+        console.log(`[Game #${game.game_number}] Final chips: ${agents.map((a: { name: string; chip_count: number }) => `${a.name}: $${a.chip_count}`).join(', ')}`)
+        
+        // Resolve on-chain game with winner
+        // IMPORTANT: Check current status first - betting may already be closed
+        if (game.on_chain_game_id !== null && gameWinnerName && isServerWalletConfigured()) {
+          try {
+            const onChainGameId = BigInt(game.on_chain_game_id)
+            
+            // Check current on-chain status
+            const currentStatus = await getOnChainGameStatus(onChainGameId)
+            console.log(`[Contract] On-chain game ${game.on_chain_game_id} current status: ${OnChainGameStatus[currentStatus]} (${currentStatus})`)
+            
+            // Step 1: Close betting if still open (session route may have already closed it)
+            if (currentStatus === OnChainGameStatus.BettingOpen) {
+              console.log(`[Contract] Closing betting for on-chain game ${game.on_chain_game_id}...`)
+              await closeOnChainBetting(onChainGameId)
+              console.log(`[Contract] Betting closed on-chain`)
+            } else if (currentStatus === OnChainGameStatus.BettingClosed) {
+              console.log(`[Contract] Betting already closed on-chain, skipping closeBetting call`)
+            } else if (currentStatus === OnChainGameStatus.Resolved) {
+              console.log(`[Contract] Game already resolved on-chain, skipping resolution`)
+              return // Don't try to resolve again
+            } else {
+              console.error(`[Contract] Unexpected on-chain status: ${currentStatus}, aborting resolution`)
+              return
+            }
+            
+            // Step 2: Resolve game with winner (Closed → Resolved)
+            const winnerAgentIndex = agentIdToContractIndex(gameWinnerName)
+            console.log(`[Contract] Resolving on-chain game ${game.on_chain_game_id} with winner ${gameWinnerName} (index ${winnerAgentIndex})...`)
+            const txHash = await resolveOnChainGame(onChainGameId, winnerAgentIndex)
+            console.log(`[Contract] On-chain game resolved! Tx: ${txHash}`)
+          } catch (err) {
+            console.error(`[Contract] Failed to resolve on-chain game:`, err)
+            // Don't fail the whole response - Supabase update succeeded
+          }
+        }
+      }
+    }
+  }
+
   return NextResponse.json({
     success: true,
     resolved: true,
@@ -1209,7 +1505,11 @@ async function resolveHand(
     winningHand,
     pot: hand.pot_amount,
     distributed: totalDistributed,
-    message: `Hand resolved! ${(winner?.agents as Agent)?.name} wins with ${winningHand}`
+    message: `Hand resolved! ${(winner?.agents as Agent)?.name} wins with ${winningHand}`,
+    // Game completion info
+    gameCompleted,
+    gameWinnerId,
+    gameWinnerName,
   })
 }
 
@@ -1238,12 +1538,14 @@ async function autoPlayHand(supabase: ReturnType<typeof createServiceClient>, lo
 
     // Get next action
     const actionResult = await processNextAction(supabase, handId)
+    if (!actionResult) break
     const actionData = await actionResult.json()
 
     if (actionData.error) {
       // Check if we need to advance round
       if (actionData.error.includes('advance')) {
         const roundResult = await advanceRound(supabase, handId)
+        if (!roundResult) continue
         const roundData = await roundResult.json()
         
         if (roundData.resolved) {

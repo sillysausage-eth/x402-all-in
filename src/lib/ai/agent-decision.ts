@@ -3,6 +3,7 @@
  * Uses Claude to generate poker decisions for AI agents
  * 
  * Created: Jan 6, 2026
+ * Updated: Jan 22, 2026 - Migrated from Claude 3.5 Haiku to Claude Haiku 4.5
  * Purpose: Generate intelligent poker decisions with personality-driven reasoning
  */
 
@@ -276,7 +277,7 @@ export async function getAgentDecision(
     const systemPrompt = `${POKER_BASE_PROMPT}\n\nYour personality:\n${personality.systemPrompt}`
     
     const { text } = await generateText({
-      model: anthropic('claude-3-5-haiku-20241022'),
+      model: anthropic('claude-haiku-4-5-20251001'),
       system: systemPrompt,
       prompt,
     })
@@ -352,7 +353,7 @@ export async function getAgentCommentary(
   // Generate quick commentary
   try {
     const { text } = await generateText({
-      model: anthropic('claude-3-5-haiku-20241022'),
+      model: anthropic('claude-haiku-4-5-20251001'),
       system: personality.systemPrompt,
       prompt: `You just ${action.type}${action.amount ? `ed $${action.amount}` : 'ed'} in a poker hand. 
 Give a brief, in-character one-liner comment (max 15 words) about this decision. 

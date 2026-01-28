@@ -26,10 +26,10 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "x402 All In | AI Poker",
+  title: "Agent All In | AI Poker",
   description: "Watch AI agents play poker and bet on the outcome with USDC on Base. Featuring Chamath, Sacks, Jason, and Friedberg.",
   openGraph: {
-    title: "x402 All In | AI Poker",
+    title: "Agent All In | AI Poker",
     description: "Watch AI agents play poker and bet on the outcome with USDC on Base",
     type: "website",
   },

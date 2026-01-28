@@ -14,6 +14,14 @@
  *                      - Removed round indicator (moved to page header)
  *                      - Increased table height by ~20% for better spacing
  * Updated: Jan 9, 2026 - Pass tableBet to PlayerBox for smart badge display
+ * Updated: Jan 10, 2026 - Added isEliminated prop support for bust players
+ *                       - Eliminated players still show at table but with ELIMINATED badge
+ *                       - Skip eliminated players from active play (via game engine)
+ * Updated: Jan 26, 2026 - Added round-ending pause before dealing next cards
+ *                       - Shows "BETTING CLOSED" indicator during transition
+ *                       - 1.5s delay allows viewers to see the last action
+ *                       - Pass delayedRound to PlayerBox so badges stay visible during transition
+ *                       - Pass handResolved to grey out losers and hide badges when winner shown
  */
 
 'use client'
@@ -34,6 +42,7 @@ interface Agent {
   holeCards?: CardNotation[]
   isFolded: boolean
   isAllIn: boolean
+  isEliminated?: boolean  // Player has 0 chips - out of the game
   lastAction?: string
   lastActionType?: 'fold' | 'check' | 'call' | 'raise' | 'all_in' | 'blind'
   lastActionRound?: Round  // Track which round the action was from
@@ -89,8 +98,11 @@ export function PokerTable({
   const prevHandNumber = useRef<number>(handNumber)
   const isFirstRender = useRef(true)
   
-  // Track round changes
+  // Track round changes for transition pause
   const prevRound = useRef<Round>(round)
+  const [isRoundTransition, setIsRoundTransition] = useState(false)
+  const [delayedRound, setDelayedRound] = useState<Round>(round)  // Delayed round for card visibility
+  const roundTransitionTimerRef = useRef<NodeJS.Timeout | null>(null)
   
   // Track pot-to-winner animation
   const [potFlowingToWinner, setPotFlowingToWinner] = useState(false)
@@ -161,6 +173,14 @@ export function PokerTable({
       prevWinnerId.current = null
       handHasEnded.current = false  // New hand, reset ended flag
       
+      // Reset round transition state
+      setIsRoundTransition(false)
+      setDelayedRound('preflop')
+      if (roundTransitionTimerRef.current) {
+        clearTimeout(roundTransitionTimerRef.current)
+        roundTransitionTimerRef.current = null
+      }
+      
       // Clear any pending winner animation timer
       if (winAnimationTimerRef.current) {
         clearTimeout(winAnimationTimerRef.current)
@@ -185,10 +205,43 @@ export function PokerTable({
     }
   }, [handNumber, round])
   
-  // Detect round changes - bets go to pot instantly (no animation)
+  // Detect round changes - add transition pause before showing new cards
   useEffect(() => {
+    // Skip transition on first render or if round hasn't actually changed
+    if (isFirstRender.current || prevRound.current === round) {
+      prevRound.current = round
+      setDelayedRound(round)
+      return
+    }
+    
+    // Round has changed - show transition
+    const roundOrder: Round[] = ['preflop', 'flop', 'turn', 'river']
+    const prevIndex = roundOrder.indexOf(prevRound.current)
+    const currIndex = roundOrder.indexOf(round)
+    
+    // Only show transition when advancing (not on new hand reset)
+    if (currIndex > prevIndex && !winnerId) {
+      // Clear any existing timer
+      if (roundTransitionTimerRef.current) {
+        clearTimeout(roundTransitionTimerRef.current)
+      }
+      
+      // Show "BETTING CLOSED" transition
+      setIsRoundTransition(true)
+      
+      // After 1.5s, hide transition and update delayed round to show new cards
+      roundTransitionTimerRef.current = setTimeout(() => {
+        setIsRoundTransition(false)
+        setDelayedRound(round)
+        roundTransitionTimerRef.current = null
+      }, 1500)
+    } else {
+      // No transition needed (new hand or going backwards)
+      setDelayedRound(round)
+    }
+    
     prevRound.current = round
-  }, [round])
+  }, [round, winnerId])
   
   // Keep displayedPot in sync with pot (except after hand has ended)
   useEffect(() => {
@@ -250,6 +303,9 @@ export function PokerTable({
       if (winAnimationTimerRef.current) {
         clearTimeout(winAnimationTimerRef.current)
       }
+      if (roundTransitionTimerRef.current) {
+        clearTimeout(roundTransitionTimerRef.current)
+      }
     }
   }, [])
   
@@ -258,7 +314,7 @@ export function PokerTable({
     <div className="relative w-full max-w-4xl mx-auto aspect-[16/12]">
       {/* Table Surface */}
       <div className="absolute inset-x-8 inset-y-24 poker-table-bg rounded-[60px] z-0 shadow-2xl">
-        {/* Dealer/Blind position chips on table */}
+        {/* Dealer/Blind position chips on table - classy casino aesthetic */}
         {positionedAgents.map((agent, index) => {
           const isDealer = dealerAgentId === agent.id
           const isSB = smallBlindAgentId === agent.id
@@ -268,29 +324,32 @@ export function PokerTable({
           
           return (
             <div key={`pos-${agent.id}`} className={positionChipPositions[index]}>
+              {/* Dealer button - classic ivory/cream casino style */}
               {isDealer && (
                 <motion.div
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="w-7 h-7 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center border-2 border-gray-300 shadow-lg"
+                  className="w-7 h-7 rounded-full bg-[#F5F5DC] text-neutral-800 text-[10px] font-bold flex items-center justify-center border-2 border-[#D4C896] shadow-lg"
                 >
                   D
                 </motion.div>
               )}
+              {/* Small blind - rich burgundy */}
               {isSB && !isDealer && (
                 <motion.div
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="w-7 h-7 rounded-full bg-yellow-400 text-black text-xs font-bold flex items-center justify-center border-2 border-yellow-300 shadow-lg"
+                  className="w-7 h-7 rounded-full bg-[#8B0000] text-white text-[10px] font-bold flex items-center justify-center border-2 border-[#A52A2A] shadow-lg"
                 >
                   SB
                 </motion.div>
               )}
+              {/* Big blind - deep navy */}
               {isBB && (
                 <motion.div
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="w-7 h-7 rounded-full bg-orange-400 text-black text-xs font-bold flex items-center justify-center border-2 border-orange-300 shadow-lg"
+                  className="w-7 h-7 rounded-full bg-[#1a1a4e] text-white text-[10px] font-bold flex items-center justify-center border-2 border-[#2a2a6e] shadow-lg"
                 >
                   BB
                 </motion.div>
@@ -308,7 +367,7 @@ export function PokerTable({
                 initial={{ scale: 0.5, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.5, opacity: 0 }}
-                className="absolute -top-10 px-4 py-1.5 bg-gradient-to-r from-amber-600 to-yellow-500 rounded-full shadow-lg"
+                className="absolute -top-10 px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-full shadow-lg"
               >
                 <span className="text-sm font-bold text-black">POSTING BLINDS</span>
               </motion.div>
@@ -323,17 +382,34 @@ export function PokerTable({
                 <span className="text-sm font-bold text-white">DEALING CARDS</span>
               </motion.div>
             )}
+            {isRoundTransition && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.8, opacity: 0, y: -10 }}
+                className="absolute -top-10 px-4 py-1.5 bg-gradient-to-r from-amber-600 to-orange-500 rounded-full shadow-lg"
+              >
+                <motion.span 
+                  animate={{ opacity: [1, 0.7, 1] }}
+                  transition={{ duration: 0.8, repeat: Infinity }}
+                  className="text-sm font-bold text-white"
+                >
+                  BETTING CLOSED
+                </motion.span>
+              </motion.div>
+            )}
           </AnimatePresence>
           
-          {/* Community Cards */}
+          {/* Community Cards - uses delayedRound for transition pause */}
           <div className="flex gap-2">
             {[0, 1, 2, 3, 4].map((index) => {
               const card = communityCards[index]
+              // Use delayedRound to hold off showing new cards during transition
               const visibleCount = 
-                round === 'preflop' ? 0 :
-                round === 'flop' ? 3 :
-                round === 'turn' ? 4 :
-                round === 'river' ? 5 : 0
+                delayedRound === 'preflop' ? 0 :
+                delayedRound === 'flop' ? 3 :
+                delayedRound === 'turn' ? 4 :
+                delayedRound === 'river' ? 5 : 0
               
               if (card && index < visibleCount) {
                 return (
@@ -349,7 +425,7 @@ export function PokerTable({
             })}
           </div>
 
-          {/* Pot Display */}
+          {/* Pot Display - classy casino aesthetic */}
           <div className="flex flex-col items-center gap-1 relative">
             {/* Main pot display */}
             <motion.div
@@ -358,14 +434,15 @@ export function PokerTable({
                 opacity: potFlowingToWinner ? [1, 1, 0] : 1 
               }}
               transition={{ duration: 1, ease: 'easeInOut' }}
-              className="flex items-center gap-2 px-5 py-2 bg-black/80 rounded-full backdrop-blur-sm shadow-lg"
+              className="flex items-center gap-2.5 px-5 py-2.5 bg-neutral-900/90 rounded-full backdrop-blur-sm shadow-xl border border-neutral-700"
             >
+              {/* Chip stack - classy casino colors (ivory, burgundy, navy) */}
               <div className="flex -space-x-1.5">
-                <div className="w-5 h-5 rounded-full bg-red-500 border-2 border-red-300" />
-                <div className="w-5 h-5 rounded-full bg-blue-500 border-2 border-blue-300" />
-                <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-green-300" />
+                <div className="w-5 h-5 rounded-full bg-[#F5F5DC] border-2 border-[#D4C896] shadow-sm" /> {/* Ivory */}
+                <div className="w-5 h-5 rounded-full bg-[#8B0000] border-2 border-[#A52A2A] shadow-sm" /> {/* Burgundy */}
+                <div className="w-5 h-5 rounded-full bg-[#1a1a4e] border-2 border-[#2a2a6e] shadow-sm" /> {/* Navy */}
               </div>
-              <span className="text-xl font-bold text-accent-gold">
+              <span className="text-xl font-bold text-white">
                 ${displayedPot.toLocaleString()}
               </span>
             </motion.div>
@@ -374,12 +451,19 @@ export function PokerTable({
             <AnimatePresence>
               {potFlowingToWinner && winnerId && (
                 <>
-                  {/* Chip trail flowing to winner */}
+                  {/* Chip trail flowing to winner - classy casino colors */}
                   {[...Array(12)].map((_, i) => {
                     const winnerIndex = positionedAgents.findIndex(a => a.id === winnerId)
                     // Calculate target position based on winner's corner
                     const targetX = winnerIndex === 0 ? -280 : winnerIndex === 1 ? 280 : winnerIndex === 2 ? 280 : -280
                     const targetY = winnerIndex < 2 ? -180 : 180
+                    
+                    // Classy casino chip colors: ivory, burgundy, navy
+                    const chipStyles = [
+                      'bg-[#F5F5DC] border-2 border-[#D4C896]',  // Ivory
+                      'bg-[#8B0000] border-2 border-[#A52A2A]',  // Burgundy
+                      'bg-[#1a1a4e] border-2 border-[#2a2a6e]',  // Navy
+                    ]
                     
                     return (
                       <motion.div
@@ -396,16 +480,12 @@ export function PokerTable({
                           delay: i * 0.05,
                           ease: "easeOut"
                         }}
-                        className={`absolute w-5 h-5 rounded-full ${
-                          i % 3 === 0 ? 'bg-red-500 border-2 border-red-300' : 
-                          i % 3 === 1 ? 'bg-blue-500 border-2 border-blue-300' : 
-                          'bg-green-500 border-2 border-green-300'
-                        } shadow-lg z-40`}
+                        className={`absolute w-5 h-5 rounded-full ${chipStyles[i % 3]} shadow-lg z-40`}
                       />
                     )
                   })}
                   
-                  {/* Pot amount label flowing to winner */}
+                  {/* Pot amount label flowing to winner - elegant gold */}
                   <motion.div
                     initial={{ x: 0, y: 0, scale: 1, opacity: 1 }}
                     animate={{ 
@@ -417,9 +497,9 @@ export function PokerTable({
                       opacity: 0,
                     }}
                     transition={{ duration: 1, ease: 'easeOut' }}
-                    className="absolute px-4 py-2 bg-green-600 rounded-full shadow-xl z-50"
+                    className="absolute px-4 py-2 bg-emerald-500/90 rounded-full shadow-xl z-50"
                   >
-                    <span className="text-xl font-bold text-white">
+                    <span className="text-xl font-bold text-neutral-900">
                       +${animatingPot.toLocaleString()}
                     </span>
                   </motion.div>
@@ -442,34 +522,41 @@ export function PokerTable({
       </div>
 
       {/* Player boxes at corners */}
-      {positionedAgents.map((agent, index) => (
-        <div key={agent.id} className={cornerPositions[index].containerClass + ' z-20'}>
-          <PlayerBox
-            name={agent.name}
-            slug={agent.slug}
-            avatarUrl={agent.avatarUrl}
-            chipCount={agent.chipCount}
-            playerBet={agent.currentBet}
-            tableBet={tableBet}
-            holeCards={agent.holeCards}
-            isFolded={agent.isFolded}
-            isAllIn={agent.isAllIn}
-            isActive={dealPhase === 'playing' && activeAgentId === agent.id}
-            isDealer={dealerAgentId === agent.id}
-            isSmallBlind={smallBlindAgentId === agent.id}
-            isBigBlind={bigBlindAgentId === agent.id}
-            isWinner={winnerId === agent.id}
-            winningHand={winnerId === agent.id ? winningHand : undefined}
-            potWon={winnerId === agent.id ? potWonByWinner : 0}
-            lastActionType={agent.lastActionType}
-            lastActionRound={agent.lastActionRound}
-            currentRound={round}
-            showCards={showAgentCards && dealPhase !== 'blinds'}
-            dealDelay={dealPhase === 'dealing' ? index * 0.3 : 0}
-            position={index < 2 ? 'top' : 'bottom'}
-          />
-        </div>
-      ))}
+      {positionedAgents.map((agent, index) => {
+        // Determine if player is eliminated (explicit flag or chipCount <= 0)
+        const isEliminated = agent.isEliminated ?? agent.chipCount <= 0
+        
+        return (
+          <div key={agent.id} className={cornerPositions[index].containerClass + ' z-20'}>
+            <PlayerBox
+              name={agent.name}
+              slug={agent.slug}
+              avatarUrl={agent.avatarUrl}
+              chipCount={agent.chipCount}
+              playerBet={agent.currentBet}
+              tableBet={tableBet}
+              holeCards={isEliminated ? undefined : agent.holeCards}  // No cards for eliminated players
+              isFolded={agent.isFolded}
+              isAllIn={agent.isAllIn}
+              isEliminated={isEliminated}
+              isActive={!isEliminated && dealPhase === 'playing' && activeAgentId === agent.id}  // Never active if eliminated
+              isDealer={dealerAgentId === agent.id}
+              isSmallBlind={!isEliminated && smallBlindAgentId === agent.id}  // No blinds for eliminated
+              isBigBlind={!isEliminated && bigBlindAgentId === agent.id}  // No blinds for eliminated
+              isWinner={winnerId === agent.id}
+              handResolved={!!winnerId}  // Grey out losers and hide badges when hand has a winner
+              winningHand={winnerId === agent.id ? winningHand : undefined}
+              potWon={winnerId === agent.id ? potWonByWinner : 0}
+              lastActionType={agent.lastActionType}
+              lastActionRound={agent.lastActionRound}
+              currentRound={delayedRound}  // Use delayedRound so badges stay visible during transition
+              showCards={!isEliminated && showAgentCards && dealPhase !== 'blinds'}  // No cards shown for eliminated
+              dealDelay={dealPhase === 'dealing' ? index * 0.3 : 0}
+              position={index < 2 ? 'top' : 'bottom'}
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }

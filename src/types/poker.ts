@@ -3,6 +3,8 @@
  * Type definitions for poker game logic
  * 
  * Created: Jan 5, 2026
+ * Updated: Jan 10, 2026 - Added GameSession types for 25-hand games
+ * Updated: Jan 12, 2026 - Added transaction hash fields to UserGameBet for on-chain tracking
  * Purpose: Card, hand, and game state types
  */
 
@@ -103,5 +105,100 @@ export type GameEvent =
   | { type: 'PLAYER_ACTION'; agentId: string; action: PlayerAction }
   | { type: 'HAND_COMPLETE'; winnerId: string; winningHand: string; pot: number }
   | { type: 'PAYOUTS_DISTRIBUTED'; payouts: { walletAddress: string; amount: number }[] }
+
+// Game session (25-hand game) types
+export type GameSessionStatus = 'waiting' | 'betting_open' | 'betting_closed' | 'resolved' | 'cancelled'
+
+export interface GameSession {
+  id: string
+  lobbyId: string
+  gameNumber: number
+  status: GameSessionStatus
+  currentHandNumber: number
+  maxHands: number
+  bettingClosesAfterHand: number
+  winnerAgentId: string | null
+  scheduledStartAt: string | null
+  startedAt: string | null
+  bettingClosedAt: string | null
+  resolvedAt: string | null
+  createdAt: string
+  onChainGameId: number | null // Smart contract game ID on Base network
+  deckCommitment: string | null // Verifiable game commitment hash (Phase 2)
+}
+
+// Agent standings during a game
+export interface AgentStanding {
+  agentId: string
+  name: string
+  avatarUrl: string | null
+  chipCount: number
+  isEliminated: boolean
+  eliminatedAtHand: number | null
+  position: number // 1st, 2nd, 3rd, 4th
+}
+
+// Game betting pool state
+export interface GameBettingPool {
+  gameId: string
+  totalPool: number
+  agentPools: {
+    agentId: string
+    agentName: string
+    pool: number
+    odds: number // e.g., 2.1x
+    betCount: number
+  }[]
+  isOpen: boolean
+}
+
+// User's bet on a game (supports multiple bets per game, per agent)
+export interface UserGameBet {
+  id: string
+  gameId: string
+  agentId: string
+  agentName: string
+  amount: number
+  oddsAtBet: number
+  currentOdds?: number // Live odds for comparison
+  status: 'pending' | 'won' | 'lost'
+  potentialPayout: number
+  claimed: boolean
+  claimedAt: string | null
+  // Transaction tracking
+  placedAt: string // ISO timestamp when bet was placed
+  betTxHash: string | null // Transaction hash for placeBet call
+  claimTxHash: string | null // Transaction hash for claim call (if claimed)
+}
+
+// Game countdown state
+export interface GameCountdownState {
+  gameId: string
+  scheduledStartAt: string
+  secondsRemaining: number
+  agents: {
+    id: string
+    name: string
+    avatarUrl: string | null
+    startingChips: number
+  }[]
+}
+
+// Winner announcement data
+export interface GameWinnerAnnouncement {
+  gameId: string
+  winner: {
+    agentId: string
+    name: string
+    avatarUrl: string | null
+    finalChipCount: number
+  }
+  standings: AgentStanding[]
+  userBetResult: {
+    won: boolean
+    betAmount: number
+    payout: number
+  } | null
+}
 
 

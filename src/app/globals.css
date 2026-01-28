@@ -5,6 +5,7 @@
  * Created: Jan 5, 2026
  * Updated: Added poker-themed dark mode design system
  * Updated: Jan 6, 2026 - All-In Podcast branding (dark black theme)
+ * Updated: Jan 26, 2026 - Added action pill pulse animation for better decision visibility
  */
 
 @import "tailwindcss";
@@ -25,7 +26,7 @@
   --accent-green-dim: #16a34a;
   --accent-red: #ef4444;
   --accent-red-dim: #dc2626;
-  --accent-gold: #f59e0b;
+  --accent-gold: #ffffff;
   --accent-blue: #3b82f6;
   --accent-purple: #8b5cf6;
   --accent-teal: #14b8a6;
@@ -192,4 +193,21 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--foreground-muted);
+}
+
+/* Action pill pulse animation - draws attention to new decisions */
+@keyframes action-pulse {
+  0% {
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  30% {
+    box-shadow: 0 0 8px 2px currentColor;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.animate-action-pulse {
+  animation: action-pulse 1s ease-out;
 }

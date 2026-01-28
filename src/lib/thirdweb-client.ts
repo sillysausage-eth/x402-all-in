@@ -3,16 +3,30 @@
  * Creates and exports the Thirdweb client for wallet connections
  * 
  * Created: Jan 9, 2026
- * Updated: Jan 9, 2026 - Added support for both Base mainnet and Sepolia
- * Updated: Jan 9, 2026 - Using built-in chain definitions from thirdweb/chains
- * Purpose: Centralized Thirdweb client configuration for the app
+ * Updated: Jan 26, 2026 - Consolidated to use single source of truth from contracts/config.ts
+ * 
+ * IMPORTANT: All contract addresses come from src/lib/contracts/config.ts
+ * Environment is controlled by NEXT_PUBLIC_CHAIN_ENV ('production' | 'development')
  */
 
-import { createThirdwebClient } from 'thirdweb'
+import { createThirdwebClient, defineChain } from 'thirdweb'
 import { base, baseSepolia } from 'thirdweb/chains'
+import { getCurrentConfig, SEPOLIA, MAINNET } from './contracts/config'
 
 // Re-export chains for use in other files
 export { base, baseSepolia }
+
+// Custom Base Sepolia with public RPC to avoid Thirdweb rate limits
+export const baseSepoliaCustom = defineChain({
+  ...baseSepolia,
+  rpc: 'https://sepolia.base.org', // Base's official free RPC
+})
+
+// Custom Base mainnet with public RPC
+export const baseCustom = defineChain({
+  ...base,
+  rpc: 'https://mainnet.base.org', // Base's official free RPC  
+})
 
 // Create the Thirdweb client
 // Client ID is required for client-side usage
@@ -20,28 +34,25 @@ export const thirdwebClient = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || '',
 })
 
-// Supported chains - both mainnet and testnet
-export const supportedChains = [base, baseSepolia]
+// Supported chains - use custom chains with public RPCs
+export const supportedChains = [baseCustom, baseSepoliaCustom]
 
 // Default chain based on environment (for initial connection)
+// Uses custom chains with public RPCs to avoid Thirdweb rate limits
 export const defaultChain = process.env.NEXT_PUBLIC_CHAIN_ENV === 'production' 
-  ? base 
-  : baseSepolia
+  ? baseCustom 
+  : baseSepoliaCustom
 
-// USDC contract addresses
+// USDC addresses - sourced from contracts/config.ts (single source of truth)
 export const USDC_ADDRESSES = {
-  [base.id]: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base mainnet USDC
-  [baseSepolia.id]: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia USDC
+  [base.id]: MAINNET.contracts.usdc,
+  [baseSepolia.id]: SEPOLIA.contracts.usdc,
 } as const
 
-// Get USDC address for a specific chain (defaults to default chain)
+// Get USDC address for a specific chain (defaults to current environment)
 export function getUsdcAddress(chainId?: number) {
-  const id = chainId || defaultChain.id
-  return USDC_ADDRESSES[id as keyof typeof USDC_ADDRESSES]
+  if (chainId) {
+    return USDC_ADDRESSES[chainId as keyof typeof USDC_ADDRESSES]
+  }
+  return getCurrentConfig().contracts.usdc
 }
-
-// Betting pool wallet (receives bets, distributes payouts)
-export const BETTING_POOL_ADDRESS = process.env.NEXT_PUBLIC_BETTING_POOL_ADDRESS as `0x${string}`
-
-// Poker pot wallet (AI agent bets go here)
-export const POKER_POT_ADDRESS = process.env.NEXT_PUBLIC_POKER_POT_ADDRESS as `0x${string}`

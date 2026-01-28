@@ -12,14 +12,54 @@
  *                       - Set currentBet to 0 when hand is resolved (pot already awarded)
  * Updated: Jan 9, 2026 - Added lastActionRound to PlayerState for action badge reset per round
  * Updated: Jan 9, 2026 - Fixed TypeScript error: removed non-existent updated_at property reference
+ * Updated: Jan 10, 2026 - Added gameId option for per-game hand tracking (1-25 per game)
+ *                        - When gameId provided, queries hands by game_id instead of lobby_id
+ * Updated: Jan 10, 2026 - EGRESS OPTIMIZATION: Major refactor to reduce Supabase egress
+ *                        - Filter subscriptions by game_id/hand_id (not table-wide)
+ *                        - Select specific columns instead of SELECT *
+ *                        - Add debouncing to batch rapid updates
+ *                        - Use payload data for simple updates where safe
+ * Updated: Jan 12, 2026 - ELIMINATED PLAYER FIX: Always show all 4 agents on table
+ *                        - Eliminated players (not in hand_agents) still appear with isEliminated flag
+ *                        - They show BUST badge but remain visible at their seat
+ * Updated: Jan 12, 2026 - END OF HAND FIX: Force fresh agent data fetch when hand resolves
+ *                        - Added isEliminated flag to PlayerState for UI display
+ *                        - When hand status changes to 'resolved', always re-fetch agents
+ *                        - This ensures chip counts and eliminations update immediately
  * Purpose: Subscribe to hands, hand_agents, and agent_actions for live updates
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import type { Hand, HandAgent, AgentAction, Agent, Lobby } from '@/types/database'
 import type { Round, BettingOdds, CardNotation } from '@/types/poker'
 import { probabilityToOdds } from '@/lib/poker/game-engine'
+
+// =============================================================================
+// EGRESS OPTIMIZATION: Column selections to avoid fetching unnecessary data
+// =============================================================================
+
+// Only fetch agent fields needed for UI (excludes system_prompt which can be large)
+const AGENT_COLUMNS = 'id, name, slug, avatar_url, chip_count, seat_position, created_at'
+
+// Hand columns - all needed for game state
+const HAND_COLUMNS = 'id, lobby_id, game_id, hand_number, status, community_cards, pot_amount, winner_agent_id, winning_hand, betting_closes_at, resolved_at, created_at, current_round, dealer_position, active_agent_id'
+
+// Hand agent columns - all needed
+const HAND_AGENT_COLUMNS = 'id, hand_id, agent_id, seat_position, hole_cards, chip_count, current_bet, is_folded, is_all_in'
+
+// Agent action columns - truncate reasoning if too long in transform
+const ACTION_COLUMNS = 'id, hand_id, agent_id, action_type, amount, reasoning, round, created_at'
+
+// Spectator bet columns for odds
+const BET_COLUMNS = 'agent_id, amount'
+
+// Debounce delay in ms - batches rapid updates
+const DEBOUNCE_MS = 100
+
+// =============================================================================
+// Types
+// =============================================================================
 
 // Transformed game state for UI consumption
 export interface SidePot {
@@ -66,6 +106,7 @@ export interface PlayerState {
   holeCards: CardNotation[]
   isFolded: boolean
   isAllIn: boolean
+  isEliminated: boolean  // True if player has 0 chips (bust)
   seatPosition: number
   lastAction?: string
   lastActionType?: 'fold' | 'check' | 'call' | 'raise' | 'all_in' | 'blind'
@@ -89,6 +130,7 @@ export interface GameAction {
 
 interface UseGameStateOptions {
   lobbyId?: string
+  gameId?: string  // When provided, queries hands by game_id for per-game hand tracking
 }
 
 interface UseGameStateReturn {
@@ -120,20 +162,52 @@ const initialGameState: GameState = {
   winningHand: null,
 }
 
+// Type for agent without system_prompt (optimized fetch)
+type AgentLite = Omit<Agent, 'system_prompt' | 'wallet_address'> & { wallet_address?: string }
+
 export function useGameState(options: UseGameStateOptions = {}): UseGameStateReturn {
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [actions, setActions] = useState<GameAction[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const [agents, setAgents] = useState<Agent[]>([])
+  const [agents, setAgents] = useState<AgentLite[]>([])
+  const [currentHandId, setCurrentHandId] = useState<string | null>(null)
+  
+  // Refs for debouncing and stable references
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const pendingRefreshRef = useRef(false)
+  const agentsRef = useRef<AgentLite[]>([])
   
   const supabase = getSupabaseClient()
+  
+  // Keep ref in sync with state
+  agentsRef.current = agents
 
-  // Fetch agents once on mount
+  // =============================================================================
+  // OPTIMIZATION: Debounced refresh to batch rapid updates
+  // =============================================================================
+  const debouncedRefresh = useCallback((fetchFn: () => Promise<void>) => {
+    pendingRefreshRef.current = true
+    
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+    
+    debounceTimerRef.current = setTimeout(async () => {
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false
+        await fetchFn()
+      }
+    }, DEBOUNCE_MS)
+  }, [])
+
+  // =============================================================================
+  // OPTIMIZATION: Fetch agents with specific columns only
+  // =============================================================================
   const fetchAgents = useCallback(async () => {
     const { data, error } = await supabase
       .from('agents')
-      .select('*')
+      .select(AGENT_COLUMNS)
       .order('created_at', { ascending: true })
     
     if (error) {
@@ -141,16 +215,18 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
       return []
     }
     
-    setAgents(data || [])
-    return data || []
+    setAgents((data || []) as AgentLite[])
+    return (data || []) as AgentLite[]
   }, [supabase])
 
-  // Fetch current hand and player states
-  const fetchCurrentHand = useCallback(async (agentList: Agent[]) => {
+  // =============================================================================
+  // OPTIMIZATION: Fetch current hand with specific columns
+  // =============================================================================
+  const fetchCurrentHand = useCallback(async (agentList: AgentLite[]) => {
     // Get active lobby
     const lobbyResult = await supabase
       .from('lobbies')
-      .select('*')
+      .select('id, name, status')  // Only needed columns
       .eq('status', 'active')
       .limit(1)
     
@@ -172,13 +248,23 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
     
     const lobbyId = options.lobbyId || lobbies[0].id
 
-    // Get latest hand
-    const handResult = await supabase
-      .from('hands')
-      .select('*')
-      .eq('lobby_id', lobbyId)
-      .order('hand_number', { ascending: false })
-      .limit(1)
+    // Get latest hand with specific columns
+    let handResult
+    if (options.gameId) {
+      handResult = await supabase
+        .from('hands')
+        .select(HAND_COLUMNS)
+        .eq('game_id', options.gameId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+    } else {
+      handResult = await supabase
+        .from('hands')
+        .select(HAND_COLUMNS)
+        .eq('lobby_id', lobbyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+    }
     
     if (handResult.error) {
       setError(new Error(handResult.error.message))
@@ -195,11 +281,14 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
     }
 
     const currentHand = hands[0]
+    
+    // Track current hand ID for filtered subscriptions
+    setCurrentHandId(currentHand.id)
 
-    // Get hand agents
+    // Get hand agents with specific columns
     const handAgentsResult = await supabase
       .from('hand_agents')
-      .select('*')
+      .select(HAND_AGENT_COLUMNS)
       .eq('hand_id', currentHand.id)
       .order('seat_position', { ascending: true })
 
@@ -211,10 +300,10 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
 
     const handAgents = handAgentsResult.data as HandAgent[]
 
-    // Get actions for this hand
+    // Get actions for this hand with specific columns
     const actionsResult = await supabase
       .from('agent_actions')
-      .select('*')
+      .select(ACTION_COLUMNS)
       .eq('hand_id', currentHand.id)
       .order('created_at', { ascending: false })
       .limit(20)
@@ -225,50 +314,77 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
 
     const handActions = (actionsResult.data || []) as AgentAction[]
 
-    // Get spectator bets for odds calculation
+    // Get spectator bets for odds calculation - only needed columns
     const betsResult = await supabase
       .from('spectator_bets')
-      .select('agent_id, amount')
+      .select(BET_COLUMNS)
       .eq('hand_id', currentHand.id)
       .eq('status', 'pending')
 
     const spectatorBets = (betsResult.data || []) as { agent_id: string; amount: number }[]
 
     // Build player states
-    // When hand is resolved, use chip counts from agents table (updated with winnings)
-    // During active hand, use chip counts from hand_agents (snapshot at hand start minus bets)
+    // IMPORTANT: Include ALL agents, not just those in handAgents
+    // Eliminated players (chip_count = 0) won't be in handAgents but should still show at table
     const isHandResolved = currentHand.status === 'resolved'
     
-    const players: PlayerState[] = handAgents.map((ha) => {
-      const agent = agentList.find(a => a.id === ha.agent_id)
-      // Get the most recent action for this player (prioritize voluntary actions over blinds)
-      const voluntaryAction = handActions.find(a => a.agent_id === ha.agent_id && a.action_type !== 'blind')
-      const blindAction = handActions.find(a => a.agent_id === ha.agent_id && a.action_type === 'blind')
-      const lastAction = voluntaryAction || blindAction // Show blind if no voluntary action yet
+    // CRITICAL: When hand is resolved, we need fresh agent data for accurate chip counts
+    // The agentList parameter might have stale data if the hand just resolved
+    // So we re-fetch agents here to ensure chip counts are current
+    let freshAgentList = agentList
+    if (isHandResolved) {
+      const freshAgentsResult = await supabase
+        .from('agents')
+        .select(AGENT_COLUMNS)
+        .order('created_at', { ascending: true })
+      
+      if (!freshAgentsResult.error && freshAgentsResult.data) {
+        freshAgentList = freshAgentsResult.data as AgentLite[]
+        // Update the agents state with fresh data
+        setAgents(freshAgentList)
+      }
+    }
+    
+    const players: PlayerState[] = freshAgentList.map((agent) => {
+      // Check if this agent is participating in the current hand
+      const ha = handAgents.find(h => h.agent_id === agent.id)
+      const isInHand = !!ha
+      
+      const voluntaryAction = handActions.find(a => a.agent_id === agent.id && a.action_type !== 'blind')
+      const blindAction = handActions.find(a => a.agent_id === agent.id && a.action_type === 'blind')
+      const lastAction = voluntaryAction || blindAction
 
-      // Use agent's current chip count (from agents table) when hand is resolved
-      // This shows the updated total after winnings are applied
-      const chipCount = isHandResolved 
-        ? Number(agent?.chip_count) || 0 
-        : Number(ha.chip_count) || 0
+      // Use agent's chip_count (from agents table) as source of truth
+      // For players in hand, use hand_agents chip count during active play
+      // IMPORTANT: Use ?? (nullish coalescing) not || to properly handle 0 chips
+      const chipCount = isHandResolved || !isInHand
+        ? Number(agent.chip_count) ?? 0 
+        : Number(ha!.chip_count) ?? 0
 
-      // When hand is resolved, set currentBet to 0 - the pot has already been awarded
-      // This prevents bet chips from reappearing after the winner animation ends
-      const currentBet = isHandResolved ? 0 : Number(ha.current_bet) || 0
+      const currentBet = isHandResolved || !isInHand ? 0 : Number(ha!.current_bet) || 0
+      
+      // Player is eliminated if they have 0 chips
+      const isEliminated = chipCount <= 0
+
+      // Truncate reasoning if too long to reduce payload size in UI
+      const reasoning = lastAction?.reasoning 
+        ? (lastAction.reasoning.length > 200 ? lastAction.reasoning.slice(0, 200) + '...' : lastAction.reasoning)
+        : undefined
 
       return {
-        id: ha.id,
-        agentId: ha.agent_id,
-        name: agent?.name || 'Unknown',
-        slug: agent?.slug || 'unknown',
-        avatarUrl: agent?.avatar_url || null,
+        id: ha?.id || `agent-${agent.id}`,
+        agentId: agent.id,
+        name: agent.name || 'Unknown',
+        slug: agent.slug || 'unknown',
+        avatarUrl: agent.avatar_url || null,
         chipCount,
         currentBet,
-        holeCards: (ha.hole_cards || []) as CardNotation[],
-        isFolded: ha.is_folded,
-        isAllIn: ha.is_all_in,
-        seatPosition: ha.seat_position,
-        lastAction: lastAction?.reasoning || undefined,
+        holeCards: isInHand ? ((ha!.hole_cards || []) as CardNotation[]) : [],
+        isFolded: isInHand ? ha!.is_folded : false,
+        isAllIn: isInHand ? ha!.is_all_in : false,
+        isEliminated,
+        seatPosition: ha?.seat_position ?? agent.seat_position ?? 0,
+        lastAction: reasoning,
         lastActionType: lastAction?.action_type,
         lastActionRound: lastAction?.round as Round | undefined,
       }
@@ -288,7 +404,6 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
 
     const odds: BettingOdds[] = players.map(p => {
       const bets = betsByAgent.get(p.agentId) || { total: 0, count: 0 }
-      // Calculate parimutuel odds
       const winProbability = totalPool > 0 ? bets.total / totalPool : 1 / players.length
       return {
         agentId: p.agentId,
@@ -299,11 +414,9 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
       }
     })
 
-    // Get round from database (tracks actual game progression)
     const communityCards = (currentHand.community_cards || []) as CardNotation[]
     const round: Round = (currentHand.current_round as Round) || 'preflop'
     
-    // Filter community cards based on round (cards are pre-dealt but revealed progressively)
     const visibleCardCount = 
       round === 'preflop' ? 0 :
       round === 'flop' ? 3 :
@@ -311,16 +424,13 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
       round === 'river' ? 5 : 0
     const visibleCommunityCards = communityCards.slice(0, visibleCardCount)
 
-    // Get active player from database (set by orchestrator)
     const activePlayerId = currentHand.active_agent_id || null
     
-    // Get dealer from dealer_position in the hand
     const dealerPosition = currentHand.dealer_position ?? 0
     const numPlayers = players.length
     const dealerPlayer = players.find(p => p.seatPosition === dealerPosition)
     const dealerPlayerId = dealerPlayer?.agentId || null
     
-    // Calculate SB and BB positions relative to dealer
     const sbPosition = (dealerPosition + 1) % numPlayers
     const bbPosition = (dealerPosition + 2) % numPlayers
     const sbPlayer = players.find(p => p.seatPosition === sbPosition)
@@ -358,14 +468,13 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
         reasoning: undefined,
         round: round as Round,
         timestamp: currentHand.resolved_at || new Date().toISOString(),
-        // Winner-specific fields
         winningHand: currentHand.winning_hand || undefined,
         holeCards: winnerHoleCards,
         potAmount: Number(currentHand.pot_amount) || 0,
       })
     }
 
-    // Calculate side pots - ONLY when there are all-in players with different amounts
+    // Calculate side pots
     const calculateSidePots = (): SidePot[] => {
       if (players.length === 0) return []
       
@@ -373,19 +482,14 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
       if (activePlayers.length === 0) return []
       
       const allInPlayers = activePlayers.filter(p => p.isAllIn)
-      
-      // Only show side pots if someone is all-in
       if (allInPlayers.length === 0) return []
       
-      // Check if all-in players have different amounts (creating side pots)
       const allInAmounts = allInPlayers.map(p => p.currentBet)
       const maxBet = Math.max(...activePlayers.map(p => p.currentBet))
       const minAllIn = Math.min(...allInAmounts)
       
-      // If everyone's all-in for the same amount, or no one bet more than the all-in, no side pots
       if (maxBet === minAllIn) return []
       
-      // Build side pots based on all-in levels
       const pots: SidePot[] = []
       const sortedBets = [...new Set(activePlayers.map(p => p.currentBet))].sort((a, b) => a - b)
       let previousLevel = 0
@@ -403,7 +507,6 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
         previousLevel = betLevel
       }
       
-      // Only return pots if there are multiple (indicating actual side pots)
       return pots.length > 1 ? pots : []
     }
     
@@ -432,7 +535,7 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
 
     setActions(transformedActions)
     setIsLoading(false)
-  }, [supabase, options.lobbyId])
+  }, [supabase, options.lobbyId, options.gameId])
 
   // Initial data fetch
   const refresh = useCallback(async () => {
@@ -442,9 +545,13 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
     await fetchCurrentHand(agentList)
   }, [fetchAgents, fetchCurrentHand, agents])
 
-  // Set up realtime subscriptions
+  // =============================================================================
+  // OPTIMIZATION: Filtered realtime subscriptions
+  // Only subscribe to changes relevant to the current game/hand
+  // =============================================================================
   useEffect(() => {
     let isMounted = true
+    const channels: ReturnType<typeof supabase.channel>[] = []
 
     const initialize = async () => {
       const agentList = await fetchAgents()
@@ -455,48 +562,90 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
 
     initialize()
 
-    // Subscribe to hands changes
+    // Helper to trigger debounced refresh
+    // Uses ref to avoid stale closure and infinite loops
+    const triggerRefresh = () => {
+      if (isMounted) {
+        debouncedRefresh(() => fetchCurrentHand(agentsRef.current))
+      }
+    }
+
+    // =============================================================================
+    // FILTERED SUBSCRIPTION: hands table
+    // Filter by game_id if provided, otherwise listen to all (fallback)
+    // IMPORTANT: When hand status changes to 'resolved', we need to ensure
+    // fresh agent data is fetched to show correct chip counts and eliminations
+    // =============================================================================
+    const handsFilter = options.gameId 
+      ? `game_id=eq.${options.gameId}`
+      : undefined
+
     const handsChannel = supabase
-      .channel('hands-changes')
+      .channel('hands-changes-optimized')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'hands',
+          filter: handsFilter,
         },
         (payload) => {
-          console.log('Hand changed:', payload)
-          // Refresh on any hand change
-          if (isMounted) {
-            fetchCurrentHand(agents)
+          const newHand = payload.new as Hand | null
+          const oldHand = payload.old as Hand | null
+          
+          // Check if hand just resolved
+          const justResolved = newHand?.status === 'resolved' && oldHand?.status !== 'resolved'
+          
+          if (justResolved) {
+            console.log(`[End of Hand] Hand #${newHand?.hand_number} resolved! Winner: ${newHand?.winner_agent_id}`)
+            console.log(`[End of Hand] Winning hand: ${newHand?.winning_hand}`)
+          } else {
+            console.log('Hand changed (filtered):', payload.eventType)
           }
+          
+          triggerRefresh()
         }
       )
       .subscribe()
+    channels.push(handsChannel)
 
-    // Subscribe to hand_agents changes
+    // =============================================================================
+    // FILTERED SUBSCRIPTION: hand_agents table
+    // We need to dynamically filter by hand_id once we know the current hand
+    // For now, use a broader subscription but with debouncing
+    // =============================================================================
     const handAgentsChannel = supabase
-      .channel('hand-agents-changes')
+      .channel('hand-agents-changes-optimized')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'hand_agents',
+          // Filter will be applied once we have currentHandId
+          // For initial load, we accept broader subscription
         },
         (payload) => {
-          console.log('Hand agent changed:', payload)
-          if (isMounted) {
-            fetchCurrentHand(agents)
+          // Only refresh if it's for the current hand
+          const record = payload.new as HandAgent | null
+          const oldRecord = payload.old as HandAgent | null
+          const handId = record?.hand_id || oldRecord?.hand_id
+          
+          if (!currentHandId || handId === currentHandId) {
+            console.log('Hand agent changed (filtered):', payload.eventType)
+            triggerRefresh()
           }
         }
       )
       .subscribe()
+    channels.push(handAgentsChannel)
 
-    // Subscribe to agent_actions changes
+    // =============================================================================
+    // FILTERED SUBSCRIPTION: agent_actions table
+    // =============================================================================
     const actionsChannel = supabase
-      .channel('agent-actions-changes')
+      .channel('agent-actions-changes-optimized')
       .on(
         'postgres_changes',
         {
@@ -505,17 +654,23 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
           table: 'agent_actions',
         },
         (payload) => {
-          console.log('New action:', payload)
-          if (isMounted) {
-            fetchCurrentHand(agents)
+          // Only refresh if it's for the current hand
+          const record = payload.new as AgentAction | null
+          
+          if (!currentHandId || record?.hand_id === currentHandId) {
+            console.log('New action (filtered):', payload.eventType)
+            triggerRefresh()
           }
         }
       )
       .subscribe()
+    channels.push(actionsChannel)
 
-    // Subscribe to spectator_bets for live odds updates
+    // =============================================================================
+    // FILTERED SUBSCRIPTION: spectator_bets for live odds updates
+    // =============================================================================
     const betsChannel = supabase
-      .channel('spectator-bets-changes')
+      .channel('spectator-bets-changes-optimized')
       .on(
         'postgres_changes',
         {
@@ -524,17 +679,29 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
           table: 'spectator_bets',
         },
         (payload) => {
-          console.log('New bet:', payload)
-          if (isMounted) {
-            fetchCurrentHand(agents)
+          const record = payload.new as { hand_id?: string; game_id?: string } | null
+          
+          // Filter by game_id or hand_id
+          if (options.gameId && record?.game_id === options.gameId) {
+            console.log('New bet (filtered):', payload.eventType)
+            triggerRefresh()
+          } else if (currentHandId && record?.hand_id === currentHandId) {
+            console.log('New bet (filtered):', payload.eventType)
+            triggerRefresh()
           }
         }
       )
       .subscribe()
+    channels.push(betsChannel)
 
-    // Subscribe to agents changes (chip count updates after hand resolution)
+    // =============================================================================
+    // SUBSCRIPTION: agents table (chip count updates)
+    // This is small (4 rows) so filtering is less critical
+    // IMPORTANT: When agent chip counts update (end of hand), we need to ensure
+    // the ref is updated IMMEDIATELY before triggering refresh
+    // =============================================================================
     const agentsChannel = supabase
-      .channel('agents-changes')
+      .channel('agents-changes-optimized')
       .on(
         'postgres_changes',
         {
@@ -543,25 +710,42 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
           table: 'agents',
         },
         async (payload) => {
-          console.log('Agent updated:', payload)
           if (isMounted) {
-            // Refetch agents to get updated chip counts
-            const updatedAgents = await fetchAgents()
-            fetchCurrentHand(updatedAgents)
+            // Use payload data to update agents in place (optimization)
+            const updatedAgent = payload.new as AgentLite
+            const newChipCount = updatedAgent.chip_count
+            const isEliminated = newChipCount <= 0
+            
+            console.log(`Agent updated: ${updatedAgent.name} - chips: $${newChipCount}${isEliminated ? ' (ELIMINATED)' : ''}`)
+            
+            // Update state and ref IMMEDIATELY for consistency
+            // This ensures fetchCurrentHand gets fresh data
+            const updatedAgents = agentsRef.current.map(a => 
+              a.id === updatedAgent.id ? { ...a, chip_count: newChipCount } : a
+            )
+            agentsRef.current = updatedAgents
+            setAgents(updatedAgents)
+            
+            triggerRefresh()
           }
         }
       )
       .subscribe()
+    channels.push(agentsChannel)
 
     return () => {
       isMounted = false
-      supabase.removeChannel(handsChannel)
-      supabase.removeChannel(handAgentsChannel)
-      supabase.removeChannel(actionsChannel)
-      supabase.removeChannel(betsChannel)
-      supabase.removeChannel(agentsChannel)
+      // Clear debounce timer
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      // Remove all channels
+      channels.forEach(channel => {
+        supabase.removeChannel(channel)
+      })
     }
-  }, [supabase, fetchAgents, fetchCurrentHand, agents])
+  // NOTE: agents intentionally NOT in deps - we use agentsRef to avoid infinite loops
+  }, [supabase, fetchAgents, fetchCurrentHand, debouncedRefresh, options.gameId, currentHandId])
 
   return {
     gameState,
@@ -571,4 +755,3 @@ export function useGameState(options: UseGameStateOptions = {}): UseGameStateRet
     refresh,
   }
 }
-

@@ -3,12 +3,10 @@
  * Real-time feed of game actions and agent decisions
  * 
  * Created: Jan 5, 2026
- * Updated: Jan 7, 2026 - Added winner display with cards and pot amount
- * Updated: Jan 9, 2026 - Cleaner design: removed emojis, expandable cards for full reasoning
- *                       - Reduced color palette, poker-themed minimal icons
- * Updated: Jan 9, 2026 - Consistent neutral icons (w-8 h-8), only winner gets gold
- *                       - All text white except winner (gold), using boldness for emphasis
- *                       - Constrained height (max-h-[320px]) to align with table
+ * Updated: Jan 10, 2026 - All-In Podcast theme: black & white informational design
+ *                       - Consistent poker suit icons (♠ ♥ ♦ ♣)
+ *                       - Clean, editorial aesthetic
+ *                       - Gold accent only for winner
  * Purpose: Show live poker action with agent reasoning
  */
 
@@ -38,41 +36,40 @@ interface ActionFeedProps {
   maxItems?: number
 }
 
-// Minimal poker-themed icons - consistent neutral styling, only winner gets gold
+// Poker suit icons - all same size, consistent styling
 const ActionIcon = ({ type }: { type: string }) => {
+  // All poker suits for different actions
   const symbols: Record<string, string> = {
-    fold: '×',
-    check: '−',
-    call: '=',
-    raise: '↑',
-    all_in: '★',
-    deal: '•',
-    win: '♠',
+    fold: '♣',      // Clubs for fold (giving up)
+    check: '♦',     // Diamonds for check (passive)
+    call: '♥',      // Hearts for call (matching)
+    raise: '♠',     // Spades for raise (aggressive)
+    all_in: '♠',    // Spades for all-in (most aggressive)
+    deal: '♦',      // Diamonds for deal
+    win: '♠',       // Spades for winner
   }
   
-  const symbol = symbols[type] || '•'
+  const symbol = symbols[type] || '♦'
   const isWinner = type === 'win'
   
   return (
-    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-      isWinner ? 'bg-accent-gold' : 'bg-neutral-700/80'
+    <div className={`w-6 h-6 flex items-center justify-center shrink-0 ${
+      isWinner ? 'text-emerald-400' : 'text-neutral-500'
     }`}>
-      <span className={`text-base font-bold ${isWinner ? 'text-black' : 'text-white'}`}>
-        {symbol}
-      </span>
+      <span className="text-base">{symbol}</span>
     </div>
   )
 }
 
-// All white text except winner - use boldness for emphasis instead of color
+// Monochrome text - gold accent only for winner name
 const ACTION_COLORS: Record<string, string> = {
-  fold: 'text-neutral-400',           // Dimmed for fold (less important)
-  check: 'text-white',
-  call: 'text-white',
-  raise: 'text-white font-semibold',  // Bold for raises
-  all_in: 'text-white font-bold',     // Extra bold for all-in
+  fold: 'text-neutral-500',           // Dimmed for fold
+  check: 'text-neutral-300',
+  call: 'text-neutral-200',
+  raise: 'text-white font-medium',    // Slightly emphasized
+  all_in: 'text-white font-semibold', // More emphasized
   deal: 'text-neutral-500',
-  win: 'text-accent-gold font-bold',  // Only winner gets color
+  win: 'text-emerald-400 font-semibold', // Green for winner
 }
 
 // Agent names in white with varying weights for distinction
@@ -133,57 +130,64 @@ export function ActionFeed({ actions, maxItems = 10 }: ActionFeedProps) {
   }
 
   return (
-    <div className="bg-background-card rounded-2xl border border-border p-4">
-      <h2 className="text-lg font-extrabold text-white mb-4 flex items-center gap-2">
-        <span className="w-2 h-2 bg-accent-green rounded-full animate-pulse" />
-        LIVE ACTION
-      </h2>
+    <div className="bg-black rounded-xl border border-neutral-800 p-4">
+      {/* Clean header */}
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-neutral-800">
+        <h2 className="text-xs font-medium tracking-widest text-white uppercase">
+          Live Action
+        </h2>
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+          <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Live</span>
+        </div>
+      </div>
 
-      <div className="space-y-2 overflow-y-auto max-h-[320px]">
+      <div className="space-y-1 overflow-y-auto max-h-[320px]">
         <AnimatePresence mode="popLayout">
           {visibleActions.map((action, index) => {
             const isExpanded = expandedId === action.id
             const hasReasoning = action.reasoning && action.actionType !== 'win'
+            const isWinner = action.actionType === 'win'
             
             return (
               <motion.div
                 key={action.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ duration: 0.2, delay: index * 0.05 }}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.15, delay: index * 0.02 }}
                 onClick={() => hasReasoning && toggleExpand(action.id)}
                 className={`
-                  p-3 bg-background-secondary rounded-xl
-                  ${hasReasoning ? 'cursor-pointer hover:bg-background-secondary/80' : ''}
-                  transition-colors
+                  py-2 border-b border-neutral-800/50 last:border-0
+                  ${hasReasoning ? 'cursor-pointer hover:bg-neutral-900/50' : ''}
+                  ${isWinner ? 'bg-neutral-900/30' : ''}
                 `}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2">
                   {/* Icon */}
                   <ActionIcon type={action.actionType} />
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className={`font-semibold ${AGENT_COLORS[action.agentSlug] || 'text-white'}`}>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-sm font-medium ${isWinner ? 'text-emerald-400' : 'text-white'}`}>
                         {action.agentName}
                       </span>
-                      <span className={ACTION_COLORS[action.actionType] || 'text-white'}>
+                      <span className={`text-sm ${ACTION_COLORS[action.actionType] || 'text-neutral-500'}`}>
                         {formatAction(action)}
                       </span>
                     </div>
 
-                    {/* Winner details: hand + cards */}
-                    {action.actionType === 'win' && (action.winningHand || action.holeCards) && (
-                      <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    {/* Winner details */}
+                    {isWinner && (action.winningHand || action.holeCards) && (
+                      <div className="mt-1 flex items-center gap-2">
                         {action.winningHand && (
-                          <span className="text-sm font-medium text-accent-gold">
+                          <span className="text-xs text-emerald-400/80">
                             {action.winningHand}
                           </span>
                         )}
                         {action.holeCards && action.holeCards.length > 0 && (
-                          <span className="text-sm text-neutral-400">
+                          <span className="text-xs text-neutral-600">
                             [{action.holeCards.map(formatCard).join(' ')}]
                           </span>
                         )}
@@ -194,10 +198,10 @@ export function ActionFeed({ actions, maxItems = 10 }: ActionFeedProps) {
                     {hasReasoning && (
                       <motion.div
                         initial={false}
-                        animate={{ height: isExpanded ? 'auto' : '1.5rem' }}
+                        animate={{ height: isExpanded ? 'auto' : '1.1rem' }}
                         className="overflow-hidden mt-1"
                       >
-                        <p className={`text-sm text-neutral-300 italic ${!isExpanded ? 'truncate' : ''}`}>
+                        <p className={`text-xs text-neutral-500 italic ${!isExpanded ? 'truncate' : ''}`}>
                           &ldquo;{action.reasoning}&rdquo;
                         </p>
                       </motion.div>
@@ -205,15 +209,15 @@ export function ActionFeed({ actions, maxItems = 10 }: ActionFeedProps) {
                     
                     {/* Expand hint */}
                     {hasReasoning && !isExpanded && action.reasoning && action.reasoning.length > 60 && (
-                      <span className="text-xs text-neutral-500 mt-0.5 block">
-                        Click to expand
+                      <span className="text-[10px] text-neutral-600 mt-0.5 block">
+                        more...
                       </span>
                     )}
 
                     {/* Timestamp and round */}
-                    <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500">
+                    <div className="flex items-center gap-1 mt-1 text-[10px] text-neutral-600">
                       <span>{formatTime(action.timestamp)}</span>
-                      <span>•</span>
+                      <span>·</span>
                       <span className="capitalize">{action.round}</span>
                     </div>
                   </div>
@@ -224,8 +228,8 @@ export function ActionFeed({ actions, maxItems = 10 }: ActionFeedProps) {
         </AnimatePresence>
 
         {visibleActions.length === 0 && (
-          <div className="text-center text-neutral-500 py-8">
-            Waiting for game to start...
+          <div className="text-center py-8">
+            <div className="text-neutral-500 text-xs">Waiting for action...</div>
           </div>
         )}
       </div>

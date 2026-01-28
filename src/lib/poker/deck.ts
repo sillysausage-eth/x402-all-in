@@ -3,9 +3,11 @@
  * Create, shuffle, and deal cards
  * 
  * Created: Jan 5, 2026
+ * Updated: Jan 20, 2026 - Added seeded shuffle for verifiable games
  * Reference: Standard 52-card deck for Texas Hold'em
  */
 
+import { createHash } from 'crypto'
 import { Card, Suit, Rank, CardNotation } from '@/types/poker'
 
 // All suits and ranks
@@ -57,14 +59,26 @@ export function createDeck(): CardNotation[] {
 }
 
 /**
+ * Simple seeded random number generator (mulberry32)
+ * Deterministic given a seed - perfect for verifiable shuffles
+ */
+function seededRandom(seed: number): () => number {
+  return function() {
+    let t = seed += 0x6D2B79F5
+    t = Math.imul(t ^ t >>> 15, t | 1)
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61)
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+
+/**
  * Fisher-Yates shuffle algorithm
- * Cryptographically secure randomness using crypto.getRandomValues
+ * Uses Math.random() for non-deterministic shuffle
  */
 export function shuffleDeck(deck: CardNotation[]): CardNotation[] {
   const shuffled = [...deck]
   
   for (let i = shuffled.length - 1; i > 0; i--) {
-    // Use crypto for better randomness in production
     const j = Math.floor(Math.random() * (i + 1))
     ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
   }
@@ -73,10 +87,43 @@ export function shuffleDeck(deck: CardNotation[]): CardNotation[] {
 }
 
 /**
- * Create and shuffle a new deck
+ * Fisher-Yates shuffle with a seed for deterministic results
+ * Given the same seed, produces the exact same shuffle every time
+ * 
+ * @param deck - The deck to shuffle
+ * @param seed - A string seed (will be hashed to create numeric seed)
+ */
+export function shuffleDeckSeeded(deck: CardNotation[], seed: string): CardNotation[] {
+  // Hash the seed to get a numeric value
+  const hash = createHash('sha256').update(seed).digest()
+  const numericSeed = hash.readUInt32BE(0)
+  const random = seededRandom(numericSeed)
+  
+  const shuffled = [...deck]
+  
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  
+  return shuffled
+}
+
+/**
+ * Create and shuffle a new deck (non-deterministic)
  */
 export function createShuffledDeck(): CardNotation[] {
   return shuffleDeck(createDeck())
+}
+
+/**
+ * Create and shuffle a new deck with a seed (deterministic)
+ * Used for verifiable games - same seed always produces same shuffle
+ * 
+ * @param seed - String seed (e.g., "master_salt:hand_number")
+ */
+export function createSeededDeck(seed: string): CardNotation[] {
+  return shuffleDeckSeeded(createDeck(), seed)
 }
 
 /**
