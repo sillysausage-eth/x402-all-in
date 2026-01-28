@@ -23,6 +23,7 @@
  * Updated: Jan 26, 2026 - CRITICAL FIX: Resolved games now use final chip counts from hand_agents
  *                        - Previously, standings for resolved games showed reset agent chips (1000)
  *                        - Now fetches chip counts from the last hand's hand_agents table
+ * Updated: Jan 28, 2026 - TypeScript fix: type latestHand as { id: string } | null for Supabase .single() result
  *                        - This ensures correct final standings display
  * 
  * Features:
@@ -261,14 +262,15 @@ export function useGameSession(options: UseGameSessionOptions = {}): UseGameSess
       
       if (currentGame && (gameStatus === 'resolved' || gameStatus === 'betting_closed' || gameStatus === 'betting_open')) {
         // Fetch the latest hand for this game to get final chip counts
-        const { data: latestHand } = await supabase
+        const { data: latestHandData } = await supabase
           .from('hands')
           .select('id')
           .eq('game_id', currentGame.id)
           .order('hand_number', { ascending: false })
           .limit(1)
           .single()
-        
+        const latestHand = latestHandData as { id: string } | null
+
         if (latestHand) {
           const { data: handAgents } = await supabase
             .from('hand_agents')

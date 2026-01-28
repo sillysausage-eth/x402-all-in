@@ -22,6 +22,9 @@
     "react-dom": "19.2.3",
     "thirdweb": "^5.116.1"
   },
+  "overrides": {
+    "use-sync-external-store": "1.4.0"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
