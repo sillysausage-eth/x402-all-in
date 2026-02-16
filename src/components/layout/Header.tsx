@@ -3,11 +3,7 @@
  * Reusable navigation header with logo, nav tabs, and wallet connection
  * 
  * Created: Jan 10, 2026
- * Updated: Jan 12, 2026 - Renamed HISTORY → BETS for betting history/claims page
- * Updated: Jan 14, 2026 - Enabled METRICS tab now that page is built
- * Updated: Jan 14, 2026 - Reordered nav: HOME, BETS, METRICS, ABOUT
- * Updated: Jan 19, 2026 - Added DEVELOPERS tab for API documentation
- * Purpose: Shared header component to maintain wallet connection state across pages
+ * Updated: Feb 16, 2026 - Removed DOCS tab, reordered nav: HOME, METRICS, BETS, ABOUT
  * Features:
  * - Logo linking to home
  * - Navigation tabs with active state based on current route
@@ -25,10 +21,9 @@ import { ConnectWalletButton } from '@/components/wallet'
 // Navigation tabs - ALL CAPS like All-In style
 const NAV_TABS = [
   { name: 'HOME', href: '/', disabled: false },
-  { name: 'BETS', href: '/bets', disabled: false },
   { name: 'METRICS', href: '/metrics', disabled: false },
+  { name: 'BETS', href: '/bets', disabled: false },
   { name: 'ABOUT', href: '/about', disabled: false },
-  { name: 'DOCS', href: '/developers', disabled: false },
 ]
 
 export function Header() {
