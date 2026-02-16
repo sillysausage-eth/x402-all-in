@@ -22,6 +22,8 @@
  *                           - Contract has: BETTING_OPEN=0, BETTING_CLOSED=1, RESOLVED=2, CANCELLED=3
  *                           - Old code had: None=0, Open=1, Closed=2, Resolved=3, Cancelled=4
  *                           - This caused status checks to fail (thought open games were "None")
+ * Updated: February 16, 2026 - Updated comments for mainnet deployment
+ *                             - x402 Wallet is now owner on both Base Sepolia and Base Mainnet
  * 
  * Server-side functions for contract owner operations:
  * - createGame: Create a new betting game on-chain (OWNER ONLY)
@@ -32,7 +34,7 @@
  * - placeBetOnChain: Place a bet for a user via x402 relay (OWNER ONLY - uses placeBetFor)
  * 
  * SECURITY: Uses Thirdweb Transactions API with Server Wallets - no private keys
- * Wallet: "x402 Wallet" (owner of V2 contract on Base Sepolia)
+ * Wallet: "x402 Wallet" (owner of V2 contract on Base Sepolia and Base Mainnet)
  */
 
 import { 
@@ -50,15 +52,15 @@ import { parseUSDC, USDC_DECIMALS } from "./index";
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Server wallet address - owner of PokerBettingV2 on Base Sepolia
+// Server wallet address - owner of PokerBettingV2 on Base Sepolia and Base Mainnet
 // This is the "x402 Wallet" in Thirdweb dashboard
 const SERVER_WALLET_ADDRESS = "0xd38Fecd44cEcBa7f8EE51Fd5f7B35981D8Ebd01D";
 
 // Thirdweb API base URL for transactions
 const THIRDWEB_API_BASE = "https://api.thirdweb.com/v1";
 
-// Seed amount per agent: 25 cents = 250,000 raw units
-const SEED_AMOUNT_PER_AGENT = parseUSDC(0.25); // 250,000n
+// Seed amount per agent: 10 cents = 100,000 raw units (contract minimum)
+const SEED_AMOUNT_PER_AGENT = parseUSDC(0.10); // 100,000n
 
 // Custom chains with public RPCs to avoid Thirdweb rate limits
 const baseSepoliaCustom = defineChain({
@@ -350,7 +352,7 @@ export async function createOnChainGame(): Promise<{ gameId: bigint; txHash: str
 }
 
 /**
- * Seed agent pools with initial bets (25¢ per agent = $1 total per game)
+ * Seed agent pools with initial bets (10¢ per agent = $0.40 total per game)
  * This ensures all agents start at 25% chance instead of 0%
  * 
  * @param gameId The on-chain game ID to seed
@@ -363,7 +365,7 @@ export async function seedAgentPools(gameId: bigint): Promise<{ txHashes: string
   const chainId = getChainId();
   
   const txHashes: string[] = [];
-  const totalNeeded = SEED_AMOUNT_PER_AGENT * 4n; // $1 total
+  const totalNeeded = SEED_AMOUNT_PER_AGENT * 4n; // $0.40 total
   
   // Check USDC allowance for the PokerBetting contract
   const currentAllowance = await readContract({

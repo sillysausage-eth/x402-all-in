@@ -7,9 +7,13 @@
  * Updated: January 22, 2026 - V2 contracts verified on Basescan, V1 deprecated
  * Updated: January 26, 2026 - Reverted to MockUSDC (contract was deployed with this token)
  * 
+ * Updated: February 16, 2026 - Deployed V2 to Base Mainnet
+ *                             - Proxy: 0x64ABd4F790ef8a44B89c6C3f4124ACdA3971B40b
+ *                             - Implementation: 0x5E4a0e0384aB562F341b2B86Ed50336206056053
+ * 
  * Networks:
  * - Base Sepolia (testnet): V2 deployed and verified
- * - Base Mainnet: TODO - deploy before production launch
+ * - Base Mainnet: V2 deployed Feb 16, 2026
  */
 
 import { baseSepolia, base } from "thirdweb/chains";
@@ -40,7 +44,8 @@ export const SEPOLIA = {
 
 /**
  * Base Mainnet Configuration
- * TODO: Deploy contracts before production launch
+ * Deployed: February 16, 2026
+ * Verified: February 16, 2026 on Basescan
  */
 export const MAINNET = {
   chainId: base.id,
@@ -48,8 +53,9 @@ export const MAINNET = {
   name: "Base",
   isTestnet: false,
   contracts: {
-    pokerBetting: "0x0000000000000000000000000000000000000000" as `0x${string}`, // TODO: Deploy
-    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`, // Official Base USDC
+    pokerBetting: "0x64ABd4F790ef8a44B89c6C3f4124ACdA3971B40b" as `0x${string}`, // UUPS Proxy - deployed Feb 16, 2026
+    pokerBettingImplementation: "0x5E4a0e0384aB562F341b2B86Ed50336206056053" as `0x${string}`, // Implementation
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`, // Official Circle USDC on Base
   },
   explorer: "https://basescan.org",
 } as const;

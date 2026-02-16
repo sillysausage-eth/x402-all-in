@@ -5,6 +5,7 @@
  * Created: Jan 6, 2026
  * Updated: Jan 9, 2026 - Added useWalletBalance hook for USDC balance display
  * Updated: Jan 10, 2026 - Added useGameSession hook for 25-hand game loop
+ * Updated: Jan 14, 2026 - Added useUserBets hook for real betting history
  * Purpose: Barrel export for clean imports
  */
 

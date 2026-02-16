@@ -11,6 +11,9 @@
  *                           - Removed dependency on spectator_bets table
  *                           - Now queries getUserBets() directly from contract
  *                           - DB only used for game metadata (game_number mapping)
+ * Updated: February 16, 2026 - Fixed hardcoded testnet address and chain
+ *                             - Now uses config system for network-aware contract addresses
+ *                             - Supports both Base Sepolia (dev) and Base Mainnet (prod)
  * 
  * This endpoint allows AI agents and users to track their betting positions
  * and understand outcomes without needing database access.
@@ -19,7 +22,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAddress, createPublicClient, http, parseAbi } from "viem";
-import { baseSepolia } from "viem/chains";
+import { baseSepolia, base } from "viem/chains";
+import { getCurrentConfig } from "@/lib/contracts/config";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -80,15 +84,18 @@ const STATUS_MAP: Record<number, BetInfo["gameStatus"]> = {
   4: "cancelled", // Cancelled
 };
 
-const CONTRACT_ADDRESS = "0x313A6ABd0555A2A0E358de535833b406543Cc14c";
 const USDC_DECIMALS = 6;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ON-CHAIN CLIENT
+// ON-CHAIN CLIENT (network-aware via config system)
 // ═══════════════════════════════════════════════════════════════════════════
 
+const config = getCurrentConfig();
+const CONTRACT_ADDRESS = config.contracts.pokerBetting;
+const viemChain = config.isTestnet ? baseSepolia : base;
+
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: viemChain,
   transport: http(),
 });
 
