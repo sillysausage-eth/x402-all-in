@@ -26,6 +26,7 @@ import { UnclaimedWinningsBanner } from '@/components/poker/UnclaimedWinningsBan
 import { BettingHistory } from '@/components/poker/BettingHistory'
 import { useGameSession } from '@/hooks'
 import { getSupabaseClient } from '@/lib/supabase/client'
+import { getCurrentConfig } from '@/lib/contracts/config'
 
 interface PreviousGame {
   id: string
@@ -49,6 +50,7 @@ export default function Home() {
     const fetchPreviousGames = async () => {
       const supabase = getSupabaseClient()
       
+      const chainId = getCurrentConfig().chainId
       const { data: basicGames, error } = await supabase
         .from('games')
         .select(`
@@ -58,9 +60,10 @@ export default function Home() {
           winner_agent_id,
           agents!games_winner_agent_id_fkey (id, name, avatar_url)
         `)
+        .eq('chain_id', chainId)
         .in('status', ['resolved', 'cancelled'])
-        .order('game_number', { ascending: false })  // Order by game number, not resolved_at (handles NULL timestamps)
-        .limit(7)  // Fetch 7 to account for filtering out current resolved game
+        .order('game_number', { ascending: false })
+        .limit(7)
       
       if (error) {
         console.error('Error fetching previous games:', error)

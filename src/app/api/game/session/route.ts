@@ -35,10 +35,18 @@
  * Updated: Jan 26, 2026 - Removed spectator_bets DB tracking in resolveGame
  *                        - On-chain contract is source of truth for all bet data
  *                        - Users claim winnings directly from contract
+ * Updated: Feb 16, 2026 - BUGFIX: Added chain_id to games table
+ *                        - Stores current chain (8453 mainnet / 84532 testnet) on each game
+ *                        - All game queries now filter by chain_id to prevent cross-chain contamination
+ *                        - Added duplicate game creation guard (409 if active game exists)
+ *                        - Game numbering is now per-chain (mainnet starts fresh at 1)
+ * Updated: Feb 16, 2026 - Added auto-claim of server wallet seed winnings after game resolution
+ *                        - Added claim_server_winnings, cancel_on_chain, refund_server admin actions
+ *                        - Server wallet automatically reclaims seed USDC after each resolved game
  * 
  * Endpoints:
  * - POST /api/game/session
- *   - action: 'create_game' | 'start_game' | 'next_hand' | 'check_game_end' | 'resolve_game' | 'reset_game'
+ *   - action: 'create_game' | 'start_game' | 'next_hand' | 'check_game_end' | 'resolve_game' | 'reset_game' | 'claim_server_winnings' | 'cancel_on_chain' | 'refund_server'
  * 
  * Game Flow:
  * 1. create_game → Sets up game with countdown + creates & seeds on-chain game
@@ -57,11 +65,14 @@ import {
   closeOnChainBetting, 
   resolveOnChainGame, 
   cancelOnChainGame,
+  claimServerWinnings,
+  claimServerRefund,
   agentIdToContractIndex,
   isServerWalletConfigured,
   getOnChainGameStatus,
   OnChainGameStatus,
 } from '@/lib/contracts/admin'
+import { getCurrentConfig } from '@/lib/contracts/config'
 import { generateGameCommitment, type GameCommitment } from '@/lib/poker/verifiable'
 
 // Constants
@@ -72,9 +83,10 @@ const MAX_HANDS = 5 // Reduced from 25 for faster contract integration testing
 const BETTING_CLOSES_AFTER_HAND = 2 // Reduced from 5 for faster contract integration testing
 
 interface SessionRequest {
-  action: 'create_game' | 'start_game' | 'next_hand' | 'check_game_end' | 'resolve_game' | 'auto_play_game' | 'reset_game'
+  action: 'create_game' | 'start_game' | 'next_hand' | 'check_game_end' | 'resolve_game' | 'auto_play_game' | 'reset_game' | 'claim_server_winnings' | 'cancel_on_chain' | 'refund_server'
   lobbyId?: string
   gameId?: string
+  onChainGameId?: number // For claim_server_winnings action
   createNewGame?: boolean // For reset_game action - whether to auto-create a new game
   force?: boolean // For start_game action - bypass countdown check (testing only)
 }
@@ -105,6 +117,42 @@ export async function POST(request: NextRequest) {
       
       case 'reset_game':
         return await resetGame(supabase, body.lobbyId, body.createNewGame)
+      
+      case 'claim_server_winnings': {
+        if (body.onChainGameId === undefined) {
+          return NextResponse.json({ error: 'onChainGameId required' }, { status: 400 })
+        }
+        try {
+          const txHash = await claimServerWinnings(BigInt(body.onChainGameId))
+          return NextResponse.json({ success: true, txHash })
+        } catch (err) {
+          return NextResponse.json({ error: err instanceof Error ? err.message : 'Claim failed' }, { status: 500 })
+        }
+      }
+
+      case 'cancel_on_chain': {
+        if (body.onChainGameId === undefined) {
+          return NextResponse.json({ error: 'onChainGameId required' }, { status: 400 })
+        }
+        try {
+          const txHash = await cancelOnChainGame(BigInt(body.onChainGameId))
+          return NextResponse.json({ success: true, txHash })
+        } catch (err) {
+          return NextResponse.json({ error: err instanceof Error ? err.message : 'Cancel failed' }, { status: 500 })
+        }
+      }
+
+      case 'refund_server': {
+        if (body.onChainGameId === undefined) {
+          return NextResponse.json({ error: 'onChainGameId required' }, { status: 400 })
+        }
+        try {
+          const txHash = await claimServerRefund(BigInt(body.onChainGameId))
+          return NextResponse.json({ success: true, txHash })
+        } catch (err) {
+          return NextResponse.json({ error: err instanceof Error ? err.message : 'Refund failed' }, { status: 500 })
+        }
+      }
       
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
@@ -140,11 +188,32 @@ async function createGame(supabase: ReturnType<typeof createServiceClient>, lobb
     currentLobbyId = lobbies[0].id
   }
 
-  // Get latest game number
+  const chainId = getCurrentConfig().chainId
+
+  // Guard: prevent duplicate game creation - check for existing non-resolved games on this chain
+  const { data: existingGames } = await db
+    .from('games')
+    .select('id, game_number, status')
+    .eq('lobby_id', currentLobbyId)
+    .eq('chain_id', chainId)
+    .in('status', ['waiting', 'betting_open', 'betting_closed'])
+    .limit(1)
+
+  if (existingGames && existingGames.length > 0) {
+    console.warn(`[Game] Duplicate create_game blocked - active game ${existingGames[0].id} already exists`)
+    return NextResponse.json({ 
+      error: 'Active game already exists', 
+      existingGameId: existingGames[0].id,
+      existingGameNumber: existingGames[0].game_number,
+    }, { status: 409 })
+  }
+
+  // Get latest game number for this chain
   const { data: lastGame } = await db
     .from('games')
     .select('game_number')
     .eq('lobby_id', currentLobbyId)
+    .eq('chain_id', chainId)
     .order('game_number', { ascending: false })
     .limit(1)
     .single()
@@ -193,6 +262,7 @@ async function createGame(supabase: ReturnType<typeof createServiceClient>, lobb
     .insert({
       lobby_id: currentLobbyId,
       game_number: gameNumber,
+      chain_id: chainId,
       status: 'waiting',
       current_hand_number: 0,
       max_hands: MAX_HANDS,
@@ -238,11 +308,13 @@ async function startGame(supabase: ReturnType<typeof createServiceClient>, gameI
   const db = supabase as any
 
   if (!gameId) {
-    // Find the waiting game
+    // Find the waiting game on the current chain
+    const chainId = getCurrentConfig().chainId
     const { data: games } = await db
       .from('games')
       .select('*')
       .eq('status', 'waiting')
+      .eq('chain_id', chainId)
       .order('created_at', { ascending: false })
       .limit(1)
     
@@ -566,6 +638,16 @@ async function resolveGame(supabase: ReturnType<typeof createServiceClient>, gam
         onChainResolveTxHash = await resolveOnChainGame(onChainGameId, winnerContractIndex)
         console.log(`[Game #${game.game_number}] On-chain game resolved. Tx: ${onChainResolveTxHash}`)
       }
+      
+      // Step 3: Auto-claim server wallet seed winnings
+      // The server wallet seeds all agents, so it always has a bet on the winner.
+      // Claiming recovers the seed USDC (plus share of losing bets minus fees).
+      try {
+        const claimTxHash = await claimServerWinnings(onChainGameId)
+        console.log(`[Game #${game.game_number}] Server wallet claimed seed winnings. Tx: ${claimTxHash}`)
+      } catch (claimErr) {
+        console.error(`[Game #${game.game_number}] Failed to claim server winnings (non-fatal):`, claimErr)
+      }
     } catch (err) {
       console.error('[Game] Failed to resolve on-chain game:', err)
       // Non-fatal - users can still claim via contract if it's manually resolved later
@@ -626,11 +708,14 @@ async function resetGame(
     currentLobbyId = lobbies[0].id
   }
 
-  // Get active games first (to cancel on-chain)
+  const chainId = getCurrentConfig().chainId
+
+  // Get active games first (to cancel on-chain) - filter by chain
   const { data: activeGames } = await db
     .from('games')
     .select('id, game_number, on_chain_game_id')
     .eq('lobby_id', currentLobbyId)
+    .eq('chain_id', chainId)
     .in('status', ['waiting', 'betting_open', 'betting_closed'])
   
   // Cancel on-chain games first
@@ -648,7 +733,7 @@ async function resetGame(
     }
   }
 
-  // Cancel all active games in Supabase
+  // Cancel all active games in Supabase (on current chain only)
   const { data: cancelledGames, error: cancelError } = await db
     .from('games')
     .update({
@@ -656,6 +741,7 @@ async function resetGame(
       resolved_at: new Date().toISOString(),
     })
     .eq('lobby_id', currentLobbyId)
+    .eq('chain_id', chainId)
     .in('status', ['waiting', 'betting_open', 'betting_closed'])
     .select('id, game_number')
 

@@ -162,11 +162,12 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Bets API] Querying ${totalGames} games for wallet ${normalizedWallet}`);
 
-    // Get game number mapping from DB
+    // Get game number mapping from DB - filter by current chain to avoid ID collisions
     const supabase = getSupabaseClient();
     const { data: dbGames } = await supabase
       .from("games")
       .select("game_number, on_chain_game_id")
+      .eq("chain_id", config.chainId)
       .not("on_chain_game_id", "is", null);
 
     const gameNumberMap = new Map<number, number>();

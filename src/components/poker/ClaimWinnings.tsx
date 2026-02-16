@@ -15,6 +15,8 @@
  * Updated: January 26, 2026 - FIX: Hide claim button immediately after successful transaction
  *                           - Button now hides when txState.status === 'success' (not just hasClaimed)
  *                           - Prevents button from showing after claim completes but before contract read updates
+ * Updated: February 16, 2026 - FIX: BaseScan link now uses dynamic explorer URL from config
+ *                             - Was hardcoded to sepolia.basescan.org, now uses getCurrentConfig().explorer
  * Purpose: Allow users to claim their on-chain winnings after game resolution
  * 
  * Features:
@@ -30,6 +32,7 @@ import { useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useClaimWinnings, useClaimRefund, type TransactionStatus } from '@/lib/contracts/hooks'
 import { GameStatus } from '@/lib/contracts'
+import { getCurrentConfig } from '@/lib/contracts/config'
 
 interface ClaimWinningsProps {
   onChainGameId: number
@@ -185,7 +188,7 @@ export function ClaimWinnings({
           )}
           {txState.txHash && (
             <a 
-              href={`https://sepolia.basescan.org/tx/${txState.txHash}`}
+              href={`${getCurrentConfig().explorer}/tx/${txState.txHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs mt-1 underline opacity-75 hover:opacity-100 block"

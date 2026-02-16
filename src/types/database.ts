@@ -89,6 +89,7 @@ export interface Database {
           resolved_at: string | null
           created_at: string
           on_chain_game_id: number | null // Smart contract game ID on Base network
+          chain_id: number // Chain ID (8453 = Base Mainnet, 84532 = Base Sepolia)
         }
         Insert: {
           id?: string
@@ -105,6 +106,7 @@ export interface Database {
           resolved_at?: string | null
           created_at?: string
           on_chain_game_id?: number | null
+          chain_id: number
         }
         Update: {
           id?: string
@@ -121,6 +123,7 @@ export interface Database {
           resolved_at?: string | null
           created_at?: string
           on_chain_game_id?: number | null
+          chain_id?: number
         }
       }
       hands: {

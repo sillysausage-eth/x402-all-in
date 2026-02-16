@@ -25,6 +25,8 @@
  *                        - Now fetches chip counts from the last hand's hand_agents table
  * Updated: Jan 28, 2026 - TypeScript fix: type latestHand as { id: string } | null for Supabase .single() result
  *                        - This ensures correct final standings display
+ * Updated: Feb 16, 2026 - Added chain_id filter to game queries
+ *                        - Prevents testnet games showing when running on mainnet and vice versa
  * 
  * Features:
  * - Game countdown timer (5 minutes between games)
@@ -36,6 +38,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
+import { getCurrentConfig } from '@/lib/contracts/config'
 import type { Database, Game, Agent, SpectatorBet } from '@/types/database'
 import type { GameSession, AgentStanding, GameBettingPool, UserGameBet, GameSessionStatus } from '@/types/poker'
 
@@ -225,7 +228,8 @@ export function useGameSession(options: UseGameSessionOptions = {}): UseGameSess
       const currentLobbyId = lobbyId || typedLobbies[0].id
 
       // Get game with specific columns
-      // If specificGameId is provided, fetch that exact game; otherwise get the latest
+      // If specificGameId is provided, fetch that exact game; otherwise get the latest on current chain
+      const chainId = getCurrentConfig().chainId
       let gameQuery = supabase
         .from('games')
         .select(GAME_COLUMNS)
@@ -234,9 +238,10 @@ export function useGameSession(options: UseGameSessionOptions = {}): UseGameSess
         // Fetch the specific game by ID
         gameQuery = gameQuery.eq('id', specificGameId)
       } else {
-        // Fetch the latest game in the lobby
+        // Fetch the latest game in the lobby on the current chain
         gameQuery = gameQuery
           .eq('lobby_id', currentLobbyId)
+          .eq('chain_id', chainId)
           .order('game_number', { ascending: false })
           .limit(1)
       }

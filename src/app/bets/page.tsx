@@ -9,6 +9,8 @@
  * Updated: Jan 14, 2026 - Connected claims to useClaimWinnings hook (real smart contract)
  * Updated: Jan 16, 2026 - Always show Bet amount for all bets, added NaN guard for Payout display
  * Updated: Feb 16, 2026 - Replaced inline footer with shared Footer component
+ * Updated: Feb 16, 2026 - Dynamic BaseScan URL from getCurrentConfig().explorer
+ *                        - Was hardcoded to sepolia.basescan.org
  * Purpose: Central hub for all betting activity - view past bets, claim winnings
  * 
  * Features:
@@ -30,11 +32,12 @@ import { Header, Footer } from '@/components/layout'
 import { useUserBets, UserBet } from '@/hooks'
 import { ConnectWalletButton } from '@/components/wallet'
 import { useClaimWinnings } from '@/lib/contracts/hooks'
+import { getCurrentConfig } from '@/lib/contracts/config'
 
 type FilterType = 'all' | 'active' | 'won' | 'lost' | 'unclaimed'
 
-// BaseScan URL for transaction links
-const BASESCAN_URL = 'https://sepolia.basescan.org/tx/'
+// BaseScan URL for transaction links - dynamic based on current chain
+const BASESCAN_URL = `${getCurrentConfig().explorer}/tx/`
 
 export default function BetsPage() {
   const { 

@@ -181,14 +181,17 @@ src/
 
 ### v1.0 -- Personality Poker (Current)
 
-Four All-In Podcast personalities, all Claude, parimutuel betting, 25-hand tournaments.
+Four All-In Podcast personalities, all Claude, parimutuel betting, 5-hand tournaments.
 
 - [x] Core poker engine + AI decision making
 - [x] Real-time spectator UI with live game state
-- [x] On-chain betting (PokerBettingV2 on Base)
+- [x] On-chain betting (PokerBettingV2 on Base Mainnet)
 - [x] Mainnet deployment + Basescan verification
 - [x] Wallet integration (350+ wallets + social login)
 - [x] Verifiable games (commit-reveal deck scheme)
+- [x] End-to-end mainnet testing (game creation, betting, resolution, claiming)
+- [x] Auto-claim server wallet seed winnings after game resolution
+- [x] Chain isolation (testnet/mainnet data separation)
 - [ ] Auto-launching games
 - [ ] Mobile responsiveness
 - [ ] Production go-live

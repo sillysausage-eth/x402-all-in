@@ -12,6 +12,9 @@
  * Updated: Jan 16, 2026 - Updated section titles to match Bets page style
  * Updated: Jan 19, 2026 - Leaderboards now 3 columns: Games Won, Hands Won, Chips Won
  * Updated: Jan 19, 2026 - Player Stats now show actual X handles with hyperlinks
+ * Updated: Feb 16, 2026 - All queries now filter by chain_id
+ *                        - Hand wins/total hands filtered via game_id join to chain games
+ *                        - Prevents testnet data bleeding into mainnet metrics
  * Purpose: Show cumulative agent metrics - game wins, total winnings, games played
  * 
  * Cost optimization: Uses Next.js ISR with 60s revalidation to minimize DB queries
@@ -19,6 +22,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { Header, Footer } from '@/components/layout'
+import { getCurrentConfig } from '@/lib/contracts/config'
 import { Database } from '@/types/database'
 import Image from 'next/image'
 
@@ -45,6 +49,7 @@ interface AgentMetrics {
 
 async function getAgentMetrics(): Promise<AgentMetrics[]> {
   const supabase = getSupabaseServer()
+  const chainId = getCurrentConfig().chainId
   
   // Fetch all agents
   const { data: agents, error: agentsError } = await supabase
@@ -57,26 +62,40 @@ async function getAgentMetrics(): Promise<AgentMetrics[]> {
     return []
   }
 
-  // Fetch game wins per agent (resolved games only)
+  // Fetch game wins per agent (resolved games on current chain only)
   const { data: gameWins, error: gameWinsError } = await supabase
     .from('games')
     .select('winner_agent_id')
     .eq('status', 'resolved')
+    .eq('chain_id', chainId)
     .not('winner_agent_id', 'is', null) as { data: Array<{ winner_agent_id: string | null }> | null; error: unknown }
   
   if (gameWinsError) {
     console.error('Error fetching game wins:', gameWinsError)
   }
 
-  // Fetch hand wins and pot amounts per agent
-  const { data: handWins, error: handWinsError } = await supabase
-    .from('hands')
-    .select('winner_agent_id, pot_amount')
-    .eq('status', 'resolved')
-    .not('winner_agent_id', 'is', null) as { data: Array<{ winner_agent_id: string | null; pot_amount: number }> | null; error: unknown }
+  // Get game IDs for current chain to filter hands
+  const { data: chainGames } = await supabase
+    .from('games')
+    .select('id')
+    .eq('chain_id', chainId) as { data: Array<{ id: string }> | null }
   
-  if (handWinsError) {
-    console.error('Error fetching hand wins:', handWinsError)
+  const chainGameIds = (chainGames || []).map(g => g.id)
+
+  // Fetch hand wins and pot amounts - only for hands belonging to current chain games
+  let handWins: Array<{ winner_agent_id: string | null; pot_amount: number }> | null = null
+  if (chainGameIds.length > 0) {
+    const { data, error: handWinsError } = await supabase
+      .from('hands')
+      .select('winner_agent_id, pot_amount')
+      .eq('status', 'resolved')
+      .in('game_id', chainGameIds)
+      .not('winner_agent_id', 'is', null) as { data: Array<{ winner_agent_id: string | null; pot_amount: number }> | null; error: unknown }
+    
+    if (handWinsError) {
+      console.error('Error fetching hand wins:', handWinsError)
+    }
+    handWins = data
   }
 
   // Aggregate metrics per agent
@@ -118,10 +137,12 @@ async function getAgentMetrics(): Promise<AgentMetrics[]> {
 async function getTotalGamesPlayed(): Promise<number> {
   const supabase = getSupabaseServer()
   
+  const chainId = getCurrentConfig().chainId
   const { count, error } = await supabase
     .from('games')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'resolved')
+    .eq('chain_id', chainId)
   
   if (error) {
     console.error('Error fetching total games:', error)
@@ -133,11 +154,22 @@ async function getTotalGamesPlayed(): Promise<number> {
 
 async function getTotalHandsPlayed(): Promise<number> {
   const supabase = getSupabaseServer()
+  const chainId = getCurrentConfig().chainId
+  
+  // Get game IDs for current chain, then count hands belonging to those games
+  const { data: chainGames } = await supabase
+    .from('games')
+    .select('id')
+    .eq('chain_id', chainId) as { data: Array<{ id: string }> | null }
+  
+  const chainGameIds = (chainGames || []).map(g => g.id)
+  if (chainGameIds.length === 0) return 0
   
   const { count, error } = await supabase
     .from('hands')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'resolved')
+    .in('game_id', chainGameIds)
   
   if (error) {
     console.error('Error fetching total hands:', error)

@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getClientId, rateLimitHeaders, RATE_LIMITS } from "@/lib/rate-limit";
+import { getCurrentConfig } from "@/lib/contracts/config";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -94,7 +95,8 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseClient();
 
-    // Build query
+    // Build query - filter by current chain to avoid testnet/mainnet cross-contamination
+    const chainId = getCurrentConfig().chainId;
     let query = supabase
       .from("games")
       .select(`
@@ -111,6 +113,7 @@ export async function GET(request: NextRequest) {
         deck_commitment,
         agents!games_winner_agent_id_fkey (name)
       `)
+      .eq("chain_id", chainId)
       .order("game_number", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -178,10 +181,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Get total count
+    // Get total count (current chain only)
     const { count } = await supabase
       .from("games")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true })
+      .eq("chain_id", chainId);
 
     const response: GamesListResponse = {
       games: gamesList,

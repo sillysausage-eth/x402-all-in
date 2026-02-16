@@ -485,11 +485,8 @@ export function usePlaceBet() {
         
         // Only approve if needed
         if (currentAllowance < amount) {
-          // Approve 10x the bet amount (or at least 1000 USDC worth) to reduce future approval needs
-          // But cap it to avoid Thirdweb's "insufficient funds" UI issue when approval > balance
-          const minApproval = BigInt(1_000_000_000); // 1000 USDC minimum
-          const tenXBet = amount * 10n;
-          const approvalAmount = tenXBet > minApproval ? tenXBet : minApproval;
+          // Approve exact bet amount only -- no over-approval with real USDC
+          const approvalAmount = amount;
           
           const approveTx = approve({
             contract: usdcContract,

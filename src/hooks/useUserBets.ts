@@ -31,6 +31,7 @@ import {
   USDC_DECIMALS,
 } from '@/lib/contracts'
 import { getSupabaseClient } from '@/lib/supabase/client'
+import { getCurrentConfig } from '@/lib/contracts/config'
 
 export interface UserBet {
   id: string
@@ -80,8 +81,10 @@ export function useUserBets(): UseUserBetsReturn {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Check if on correct network (Base Sepolia for now)
-  const isWrongNetwork = chain && chain.id !== 84532 // Base Sepolia chain ID
+  // Check if on correct network - dynamic based on NEXT_PUBLIC_CHAIN_ENV
+  const expectedChainId = getCurrentConfig().chainId
+  const expectedChainName = getCurrentConfig().name
+  const isWrongNetwork = chain && chain.id !== expectedChainId
   
   // Memoize contract to prevent infinite re-renders
   const contract = useMemo(() => {
@@ -90,9 +93,8 @@ export function useUserBets(): UseUserBetsReturn {
       return null
     }
     
-    // Only Base Sepolia is supported for now
-    if (chain.id !== 84532) {
-      console.log(`[useUserBets] Wrong network: ${chain.name} (${chain.id}). Need Base Sepolia (84532)`)
+    if (chain.id !== expectedChainId) {
+      console.log(`[useUserBets] Wrong network: ${chain.name} (${chain.id}). Need ${expectedChainName} (${expectedChainId})`)
       return null
     }
     
@@ -122,7 +124,7 @@ export function useUserBets(): UseUserBetsReturn {
       setBets([])
       setIsLoading(false)
       if (isWrongNetwork) {
-        setError(`Please switch to Base Sepolia network. You are currently on ${chain?.name || 'unknown network'}.`)
+        setError(`Please switch to ${expectedChainName} network. You are currently on ${chain?.name || 'unknown network'}.`)
       }
       return
     }
@@ -146,19 +148,21 @@ export function useUserBets(): UseUserBetsReturn {
         console.error('[useUserBets] Failed to get total games:', err)
         const errorMsg = err instanceof Error ? err.message : String(err)
         if (errorMsg.includes('zero data') || errorMsg.includes('0x')) {
-          setError('Contract not found. Please switch your wallet to Base Sepolia network.')
+          setError(`Contract not found. Please switch your wallet to ${expectedChainName} network.`)
         } else {
-          setError('Could not connect to the betting contract. Please check your wallet is on the correct network (Base Sepolia).')
+          setError(`Could not connect to the betting contract. Please check your wallet is on the correct network (${expectedChainName}).`)
         }
         setIsLoading(false)
         return
       }
       
-      // Fetch game-to-game_number mapping from Supabase for display
+      // Fetch game-to-game_number mapping from Supabase for display (current chain only)
       const supabase = getSupabaseClient()
+      const chainId = getCurrentConfig().chainId
       const { data: gamesData } = await supabase
         .from('games')
         .select('id, game_number, on_chain_game_id, created_at')
+        .eq('chain_id', chainId)
         .not('on_chain_game_id', 'is', null)
         .order('game_number', { ascending: false }) as { data: Array<{ id: string; game_number: number; on_chain_game_id: number | null; created_at: string }> | null }
 

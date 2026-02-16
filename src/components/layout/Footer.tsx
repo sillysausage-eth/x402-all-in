@@ -4,9 +4,12 @@
  *
  * Created: Feb 16, 2026 - Extracted from inline footers across all pages.
  *   Added smart contract (Basescan) and source code (GitHub) links.
+ * Updated: Feb 16, 2026 - Dynamic explorer URL and contract address from getCurrentConfig()
+ *   Was hardcoded to sepolia.basescan.org with testnet contract address.
  */
 
 import Link from 'next/link'
+import { getCurrentConfig } from '@/lib/contracts/config'
 
 export function Footer() {
   return (
@@ -28,7 +31,7 @@ export function Footer() {
                 </svg>
               </a>
               <a
-                href="https://sepolia.basescan.org/address/0x313A6ABd0555A2A0E358de535833b406543Cc14c#code"
+                href={`${getCurrentConfig().explorer}/address/${getCurrentConfig().contracts.pokerBetting}#code`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-neutral-400 hover:text-white transition-colors text-xs font-medium"

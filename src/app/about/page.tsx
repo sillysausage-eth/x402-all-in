@@ -12,6 +12,7 @@
 import { POKER_BASE_PROMPT } from '@/types/agents'
 import { AgentPrompts } from '@/components/about'
 import { Header, Footer } from '@/components/layout'
+import { getCurrentConfig } from '@/lib/contracts/config'
 
 export default function AboutPage() {
   return (
@@ -195,7 +196,7 @@ export default function AboutPage() {
           <h2 className="text-xl font-bold text-white mb-4">Links</h2>
           <div className="grid grid-cols-2 gap-4">
             <a
-              href="https://sepolia.basescan.org/address/0x313A6ABd0555A2A0E358de535833b406543Cc14c#code"
+              href={`${getCurrentConfig().explorer}/address/${getCurrentConfig().contracts.pokerBetting}#code`}
               target="_blank"
               rel="noopener noreferrer"
               className="bg-black border border-neutral-800 rounded-xl p-5 hover:border-neutral-600 transition-colors group"

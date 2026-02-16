@@ -10,6 +10,9 @@
  *                           - Added logging for poll progress
  *                           - Reduced timeout to 60 polls @ 2s = 2 minutes
  * Updated: January 23, 2026 - Added placeBetOnChain for x402 bet placement
+ * Updated: February 16, 2026 - Added claimServerWinnings and claimServerRefund functions
+ *                             - claimServerWinnings: reclaims seed USDC from resolved games
+ *                             - claimServerRefund: reclaims seed USDC from cancelled games
  *                           - After x402 payment settles USDC to platform wallet,
  *                           - this function places the bet on the smart contract
  * Updated: January 23, 2026 - BUGFIX: placeBetOnChain now uses placeBetFor when bettor provided
@@ -542,6 +545,68 @@ export async function cancelOnChainGame(gameId: bigint): Promise<string> {
   );
   
   console.log(`[Contract] Cancelled game ${gameId}. Tx: ${txHash}`);
+  
+  return txHash;
+}
+
+/**
+ * Claim server wallet winnings from a resolved game
+ * The server wallet seeds all agent pools, so it always has a winning bet.
+ * This reclaims the seed funds (plus any share of losing bets).
+ * @param gameId The on-chain game ID
+ * @returns Transaction hash
+ */
+export async function claimServerWinnings(gameId: bigint): Promise<string> {
+  const contract = getPokerBettingContract();
+  const config = getConfig();
+  const chainId = getChainId();
+  
+  console.log(`[Contract] Claiming server wallet winnings for game ${gameId}...`);
+  
+  const tx = prepareContractCall({
+    contract,
+    method: "function claimWinnings(uint256 gameId)",
+    params: [gameId],
+  });
+  
+  const encodedData = await encode(tx);
+  const txHash = await sendTransaction(
+    chainId,
+    config.contracts.pokerBetting,
+    encodedData
+  );
+  
+  console.log(`[Contract] Server wallet claimed winnings for game ${gameId}. Tx: ${txHash}`);
+  
+  return txHash;
+}
+
+/**
+ * Claim server wallet refund from a cancelled game
+ * @param gameId The on-chain game ID
+ * @returns Transaction hash
+ */
+export async function claimServerRefund(gameId: bigint): Promise<string> {
+  const contract = getPokerBettingContract();
+  const config = getConfig();
+  const chainId = getChainId();
+  
+  console.log(`[Contract] Claiming server wallet refund for cancelled game ${gameId}...`);
+  
+  const tx = prepareContractCall({
+    contract,
+    method: "function claimRefund(uint256 gameId)",
+    params: [gameId],
+  });
+  
+  const encodedData = await encode(tx);
+  const txHash = await sendTransaction(
+    chainId,
+    config.contracts.pokerBetting,
+    encodedData
+  );
+  
+  console.log(`[Contract] Server wallet claimed refund for game ${gameId}. Tx: ${txHash}`);
   
   return txHash;
 }

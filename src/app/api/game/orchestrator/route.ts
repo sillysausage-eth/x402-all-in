@@ -23,6 +23,14 @@
  *                        - Previously only session route closed betting, but orchestrator
  *                        - could start hands directly without going through session route
  *                        - Now checks and closes betting in both places
+ * Updated: Feb 16, 2026 - Added chain_id filter to active game query
+ *                        - Prevents cross-chain contamination between testnet/mainnet games
+ * Updated: Feb 16, 2026 - BUGFIX: Changed max_hands guard from >= to >
+ *                        - Was prematurely blocking the final hand (hand 5 of 5)
+ *                        - current_hand_number is the hand we're ON, not past
+ * Updated: Feb 16, 2026 - BUGFIX: Update hand_agents chip_count after pot distribution
+ *                        - Previously only updated agents table, leaving hand_agents stale
+ *                        - GameFinished UI reads from hand_agents, showing pre-pot chip counts
  * Purpose: Server-side game loop orchestration
  * 
  * FIX #1 (Jan 7): Added total_contributed tracking to fix side pot calculation.
@@ -58,6 +66,7 @@ import type { DecisionContext, OpponentState, RecentAction } from '@/types/agent
 import type { Hand, HandAgent, Agent, AgentAction } from '@/types/database'
 import type { CardNotation, Round } from '@/types/poker'
 import { closeOnChainBetting, resolveOnChainGame, agentIdToContractIndex, isServerWalletConfigured, getOnChainGameStatus, OnChainGameStatus } from '@/lib/contracts/admin'
+import { getCurrentConfig } from '@/lib/contracts/config'
 import '@/lib/agents'
 
 const SMALL_BLIND = 10
@@ -126,10 +135,13 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
   const currentLobbyId = lobbyData.id
 
   // Get the current active game for this lobby (including salt for verifiable deck)
+  // Filter by chain_id to avoid cross-chain contamination between testnet/mainnet
+  const chainId = getCurrentConfig().chainId
   const activeGameResult = await supabase
     .from('games')
     .select('id, game_number, status, current_hand_number, max_hands, salt_reveal, on_chain_game_id')
     .eq('lobby_id', currentLobbyId)
+    .eq('chain_id', chainId)
     .in('status', ['waiting', 'betting_open', 'betting_closed'])
     .order('created_at', { ascending: false })
     .limit(1)
@@ -154,8 +166,10 @@ async function startNewHand(supabase: ReturnType<typeof createServiceClient>, lo
   }
   
   // Check if game has reached max hands
+  // Use > (not >=) because current_hand_number is the hand we're ON, not past
+  // e.g. if max_hands=5 and current_hand_number=5, we still need to play hand 5
   const maxHands = activeGame.max_hands || 25
-  if (activeGame.current_hand_number >= maxHands) {
+  if (activeGame.current_hand_number > maxHands) {
     return NextResponse.json({ 
       error: `Game #${activeGame.game_number} has reached max hands (${maxHands})`,
       gameId: activeGame.id,
@@ -1389,7 +1403,7 @@ async function resolveHand(
     })
     .eq('id', hand.id)
 
-  // PERSIST CHIP COUNTS TO AGENTS TABLE
+  // PERSIST CHIP COUNTS TO AGENTS TABLE AND HAND_AGENTS TABLE
   // Each player gets their remaining chips plus any winnings
   for (const ha of handAgents) {
     const playerWinnings = winnings.get(ha.agent_id) || 0
@@ -1400,6 +1414,14 @@ async function resolveHand(
       .from('agents')
       .update({ chip_count: finalChips })
       .eq('id', ha.agent_id)
+    
+    // Also update hand_agents with final chip count (post-pot-distribution)
+    // This is critical for the GameFinished UI which reads from hand_agents
+    await db
+      .from('hand_agents')
+      .update({ chip_count: finalChips })
+      .eq('hand_id', hand.id)
+      .eq('agent_id', ha.agent_id)
     
     const name = (ha.agents as Agent)?.name || 'Unknown'
     if (playerWinnings > 0) {
